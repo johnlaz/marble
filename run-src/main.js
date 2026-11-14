@@ -704,6 +704,12 @@ function stepFrame() {
       m.inside[si] = inside;
     }
     const v = m.body.linvel(), sp2 = v.x * v.x + v.y * v.y + v.z * v.z;
+    if (m.pv) {
+      const dv = Math.hypot(v.x - m.pv[0], v.y - m.pv[1], v.z - m.pv[2]);
+      // a sudden change in velocity = the marble clicked against something (gravity alone changes it by ~0.17 per frame)
+      if (dv > 0.9 && head - (m.lastHit || -99) > 6) { m.lastHit = head; events.push({ f: head, kind: 'hit', v: Math.min(1, (dv - 0.9) / 3.5) }); }
+    }
+    m.pv = [v.x, v.y, v.z];
     if (sp2 > 0.01) moving = true;
     // gentle "shake" if a marble gets wedged somewhere that isn't the catcher
     if (sp2 < 0.02 && t.y > 0.5 && !nearCatcher(t)) {
@@ -809,11 +815,60 @@ function tone(freq, dur, vol, type = 'sine', when = 0, partials = [[1, 1]], swee
     o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.02);
   }
 }
+// real-marble sounds: a click when a marble hits something, and a soft rumble that follows how fast marbles roll
+let noiseBuf = null, roll = null;
+function noiseBuffer() {
+  if (noiseBuf) return noiseBuf;
+  noiseBuf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate);
+  const d = noiseBuf.getChannelData(0); let b = 0;
+  for (let i = 0; i < d.length; i++) { b = b * 0.6 + (Math.random() * 2 - 1) * 0.4; d[i] = b; }
+  return noiseBuf;
+}
+function marbleClick(vel) {
+  if (!soundOn) return; ensureAudio(); if (!actx) return;
+  const t0 = actx.currentTime, vol = 0.05 + vel * 0.16, f = 2300 + Math.random() * 900;
+  for (const [mul, amp, dur] of [[1, 1, 0.05], [1.62, 0.5, 0.035], [0.42, 0.7, 0.09]]) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine'; o.frequency.value = f * mul;
+    g.gain.setValueAtTime(vol * amp, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.01);
+  }
+  const n = actx.createBufferSource(), ng = actx.createGain(), hp = actx.createBiquadFilter();
+  n.buffer = noiseBuffer(); hp.type = 'highpass'; hp.frequency.value = 3000;
+  ng.gain.setValueAtTime(vol * 0.5, t0); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.02);
+  n.connect(hp).connect(ng).connect(actx.destination); n.start(t0, Math.random()); n.stop(t0 + 0.03);
+}
+let rollPrev = new Map();
+function updateRoll(dt) {
+  if (!soundOn || !actx || actx.state !== 'running') { if (roll) roll.g.gain.value = 0; return; }
+  if (!roll) {
+    const src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain();
+    src.buffer = noiseBuffer(); src.loop = true; bp.type = 'bandpass'; bp.Q.value = 0.7; bp.frequency.value = 300; g.gain.value = 0;
+    src.connect(bp).connect(g).connect(actx.destination); src.start();
+    roll = { src, bp, g };
+  }
+  // how fast is the fastest visible marble moving along the track right now (works while rewinding too)
+  let best = 0;
+  if (dir !== 0) for (const m of marbles) {
+    if (!m.mesh.visible) continue;
+    const p = m.mesh.position, q = rollPrev.get(m);
+    if (q && dt > 0) {
+      const sp = Math.hypot(p.x - q.x, p.z - q.z) / dt;       // horizontal speed: rolling, not falling
+      const fall = Math.abs(p.y - q.y) / dt;
+      if (fall < sp * 1.2 + 0.5) best = Math.max(best, Math.min(sp, 7));
+    }
+    rollPrev.set(m, p.clone());
+  } else rollPrev.clear();
+  const k = Math.min(1, best / 6), t = actx.currentTime;
+  roll.g.gain.setTargetAtTime(best > 0.25 ? 0.03 + k * 0.1 : 0, t, 0.06);
+  roll.bp.frequency.setTargetAtTime(260 + k * 900, t, 0.08);
+}
 function playEvent(ev) {
+  if (ev.kind === 'hit') { marbleClick(ev.v); return; }
   if (ev.kind === 'note') { if (ev.freq) tone(ev.freq, 0.7, 0.16, 'sine', 0, [[1, 1], [2.01, 0.28], [4.1, 0.08]]); }
   else if (ev.kind === 'bell') tone(660, 1.6, 0.11, 'sine', 0, [[1, 1], [2.76, 0.45], [5.4, 0.25], [8.9, 0.1]]);
-  else if (ev.kind === 'goal') [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, 0.55, 0.1, 'triangle', i * 0.07));
-  else if (ev.kind === 'portal') tone(220, 0.5, 0.09, 'sawtooth', 0, [[1, 0.6], [1.5, 0.3]], 1100);
+  else if (ev.kind === 'goal') { marbleClick(0.5); marbleClick(0.3); setTimeout(() => marbleClick(0.2), 90); }
+  else if (ev.kind === 'portal') tone(300, 0.35, 0.04, 'sine', 0, [[1, 1]], 900);
 }
 function playEventsBetween(a, b) {
   // events are stored in frame order
@@ -1235,6 +1290,7 @@ function frame() {
       if (playhead > head) { playhead = head; if (finished || !marbles.length) dir = 0; }
     }
   }
+  updateRoll(dt);
   const nf = Math.floor(playhead);
   if (dir > 0 && nf > soundF && nf - soundF < 40) playEventsBetween(soundF, nf);
   soundF = nf;
@@ -1259,6 +1315,8 @@ async function boot() {
   await RAPIER.init();
   $('ver').textContent = `v${VERSION}`;
   resize(); buildTray(); swatches(); applyTheme();
+  const measure = () => { document.documentElement.style.setProperty('--top-h', $('top').offsetHeight + 'px'); document.documentElement.style.setProperty('--bar-h', $('bar').offsetHeight + 'px'); };
+  measure(); new ResizeObserver(measure).observe($('bar')); new ResizeObserver(measure).observe($('top'));
   let b = null;
   try { b = JSON.parse(localStorage.getItem('marble.current') || 'null'); } catch (_) { /* ignore */ }
   if (!b || !b.pieces || !b.pieces.length) b = buildFromSeq(LIBRARY[0].seq);
