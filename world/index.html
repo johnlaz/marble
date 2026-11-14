@@ -216,6 +216,9 @@
     @media (max-width: 480px) {
       #toggle-scrubber-label { display: none !important; }
     }
+    #ui-toggle { position: fixed; right: 6px; top: 50%; transform: translateY(-50%); z-index: 45; width: 40px; height: 40px; border-radius: 9999px; background: rgba(255,255,255,.75); backdrop-filter: blur(6px); box-shadow: 0 1px 6px rgba(15,23,42,.25); font-size: 18px; display: flex; align-items: center; justify-content: center; opacity: .8; }
+    body.clean header, body.clean #builder-dock, body.clean #timeline-panel, body.clean #toast-banner { display: none !important; }
+    body.clean #ui-toggle { opacity: .45; }
     /* ride along: hide everything that is not needed for watching */
     body.riding #builder-dock, body.riding #btn-presets, body.riding #btn-marble-style, body.riding #btn-theme-toggle, body.riding #btn-drop-multi, body.riding #toast-banner { display: none !important; }
   </style>
@@ -374,6 +377,7 @@
   </div>
 
   <!-- ADAPTIVE BUILDER DOCK: Left Sidebar when Vertical (Portrait), Bottom Bar when Wide (Landscape) -->
+  <button id="ui-toggle" title="Hide controls" aria-label="Hide or show controls">👁</button>
   <footer id="builder-dock">
     <div id="builder-dock-inner" class="bg-white/95 backdrop-blur-md rounded-2xl sm:rounded-3xl shadow-2xl border-2 border-slate-200 pointer-events-auto flex gap-1.5 sm:gap-2">
       <!-- Scrollable / Wrapping Piece Buttons (Populated by JS) -->
@@ -3207,7 +3211,7 @@
       const presetsGrid = document.getElementById('presets-grid');
 
       // ---- My builds (saved on this device) + version / contact ----
-      const WORLD_VERSION = '1.3';
+      const WORLD_VERSION = '1.4';
       const SAVE_KEY = 'marbleworld.saved';
       const savedBuilds = () => { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); } catch (_) { return []; } };
       function saveCurrentBuild() {
@@ -3765,6 +3769,12 @@
         renderer.render(scene, camera);
       }
 
+      // ---- Hide / show all the controls for full-screen watching ----
+      document.getElementById('ui-toggle').addEventListener('click', () => {
+        const off = !document.body.classList.contains('clean');
+        document.body.classList.toggle('clean', off);
+        const t = document.getElementById('ui-toggle'); t.textContent = off ? '☰' : '👁'; t.title = off ? 'Show controls' : 'Hide controls';
+      });
       // ---- Back-button guard: Android back closes a menu first, then asks once before leaving ----
       (function () {
         let armed = 0;

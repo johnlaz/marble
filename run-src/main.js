@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '1.3';
+const VERSION = '1.5';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -220,16 +220,51 @@ function buildFromSeq(seq, melody) {
   b.startY = Math.max(3, Math.round((1.05 - lo) * 10) / 10);
   return b;
 }
+const _lc = new Map();
+function cachedLayout(type, pos, yaw) {
+  const k = type + '|' + pos.x.toFixed(4) + '|' + pos.y.toFixed(4) + '|' + pos.z.toFixed(4) + '|' + yaw.toFixed(5);
+  let L = _lc.get(k);
+  if (!L) { if (_lc.size > 4000) _lc.clear(); L = computeLayout(type, pos, yaw); _lc.set(k, L); }
+  return L;
+}
 function computeAll(b) {
   const m = new Map();
   for (const p of b.pieces) {
     const par = p.parent == null ? null : m.get(p.parent);
     const ex = par ? par.exits[p.ex || 0] : null;
-    const L = ex ? computeLayout(p.type, ex.pos, ex.yaw) : computeLayout(p.type, new THREE.Vector3(0, b.startY, 0), 0);
-    L.id = p.id; L.parent = p.parent;
+    const L0 = ex ? cachedLayout(p.type, ex.pos, ex.yaw) : cachedLayout(p.type, new THREE.Vector3(0, b.startY, 0), 0);
+    const L = Object.create(L0); L.id = p.id; L.parent = p.parent;
     m.set(p.id, L);
   }
   return m;
+}
+/* Edit checks: a stitched run may already overlap itself, so an edit only fails if it creates NEW overlaps (or hits the table). */
+function clashKeys(b) {
+  const lay = computeAll(b), list = [...lay.values()], out = new Set();
+  const bb = list.map((L) => { let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9, w = 0; for (const d of L.dense) { const p = d.p; if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x; if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y; if (p.z < z0) z0 = p.z; if (p.z > z1) z1 = p.z; if (d.w > w) w = d.w; } const m = 0.3 + 0.5 * w; return [x0 - m, x1 + m, y0 - m, y1 + m, z0 - m, z1 + m]; });
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const A = list[i], B = list[j];
+    if (A.parent === B.id || B.parent === A.id) continue;
+    const p = bb[i], q = bb[j];
+    if (p[1] < q[0] || q[1] < p[0] || p[3] < q[2] || q[3] < p[2] || p[5] < q[4] || q[5] < p[4]) continue;
+    let hit = false;
+    for (const a of A.dense) { for (const c of B.dense) { const thr = 0.3 + 0.5 * Math.max(a.w, c.w); if (a.p.distanceToSquared(c.p) < thr * thr) { hit = true; break; } } if (hit) break; }
+    if (hit) out.add(A.id + '-' + B.id);
+  }
+  return out;
+}
+let _oldKeys = null;
+function editFault(nb) {
+  for (const L of computeAll(nb).values()) for (const d of L.dense) if (d.p.y < 0.3) return GROUND_MSG;
+  if (!_oldKeys) _oldKeys = clashKeys(build);
+  for (const k of clashKeys(nb)) if (!_oldKeys.has(k)) return 'That would crash into another piece.';
+  return null;
+}
+/* lifts the whole run a little if the edit only fails because it would touch the table */
+function fitEdit(nb) {
+  let msg = editFault(nb);
+  for (let k = 0; k < 4 && msg === GROUND_MSG; k++) { nb.startY += 2; msg = editFault(nb); }
+  return msg;
 }
 // a connection is a number: piece id * 4 + exit index
 const connId = (c) => c >> 2, connEx = (c) => c & 3;
@@ -957,7 +992,8 @@ function insertBefore(type, pieceId) {
   const np = { id: nid, type, parent: x.parent, ex: x.ex || 0 };
   x.parent = nid; x.ex = 0;
   nb.pieces.splice(nb.pieces.indexOf(x), 0, np);
-  const msg = validateBuild(nb);
+  _oldKeys = null;
+  const msg = fitEdit(nb);
   if (msg) { toast(msg.startsWith('Too low') ? 'No room to insert that here – lift the run with “Higher” first.' : 'That would crash into another piece.'); blip(180, 0.15, 0.05); return false; }
   snapshot(); build = nb; selectedPiece = null; selectedType = null;
   rebuild(); highlight(); blip(560, 0.08, 0.07);
@@ -993,6 +1029,7 @@ function reopenEnds() {
   toast('End removed. Add pieces, then close it again with a Finish piece.');
 }
 function undo() {
+  _oldKeys = null;
   if (!undoStack.length) return;
   build = JSON.parse(undoStack.pop()); selectedPiece = null; activeConn = null; selectedType = null;
   rebuild(); blip(380, 0.07, 0.05);
@@ -1012,45 +1049,81 @@ function toast(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 3800);
 }
 const tryInsert = {};
+function mkChip(t, label, fn, cls) {
+  const c = document.createElement('button'); c.className = 'chip' + (cls ? ' ' + cls : '');
+  c.innerHTML = `${iconSvg(t)}<span>${label || getDef(t).name}</span>`;
+  c.onclick = () => { ensureAudio(); fn(t); };
+  return c;
+}
+function chipRow(label, chips) {
+  const row = document.createElement('div'); row.className = 'chiprow';
+  const lab = document.createElement('span'); lab.className = 'chipLab'; lab.textContent = label; row.appendChild(lab);
+  chips.forEach((c) => row.appendChild(c)); return row;
+}
+function swapPiece(type, id) {
+  const nb = JSON.parse(JSON.stringify(build)), x = nb.pieces.find((p) => p.id === id);
+  if (!x) return false;
+  x.type = type; _oldKeys = null;
+  const msg = fitEdit(nb);
+  if (msg) { toast(msg.startsWith('Too low') ? 'No room for that here – lift the run with “Higher” first.' : 'That would crash into another piece.'); blip(180, 0.15, 0.05); return false; }
+  snapshot(); build = nb; selectedPiece = null; selectedType = null; rebuild(); highlight(); blip(560, 0.08, 0.07);
+  toast(`Swapped to ${getDef(type).name}.`); return true;
+}
+/* remove only this piece and close the gap (its follower takes its place) */
+function removeJustThis(id) {
+  const nb = JSON.parse(JSON.stringify(build)), x = nb.pieces.find((p) => p.id === id);
+  if (!x || x.parent == null) return false;
+  const kids = nb.pieces.filter((p) => p.parent === id);
+  if (kids.length > 1 || (kids.length === 1 && (kids[0].ex || 0) !== 0)) { toast('This piece splits the track – use “Remove it and everything after”.'); return false; }
+  if (kids[0]) { kids[0].parent = x.parent; kids[0].ex = x.ex || 0; }
+  nb.pieces = nb.pieces.filter((p) => p.id !== id); _oldKeys = null;
+  const msg = fitEdit(nb);
+  if (msg) { toast('The pieces after it would not line up there. Try “Swap” instead.'); blip(180, 0.15, 0.05); return false; }
+  snapshot(); build = nb; selectedPiece = null; rebuild(); highlight(); blip(300, 0.1, 0.05);
+  toast('Piece removed and the gap closed.'); return true;
+}
 function renderChips() {
   const box = $('chips'); box.innerHTML = '';
-  let mode = null, list = [];
   if (selectedType || drag?.active) { box.style.display = 'none'; return; }
+  _oldKeys = null;
   if (selectedPiece != null) {
-    mode = 'insert';
     const X = build.pieces.find((p) => p.id === selectedPiece);
-    const lay = layout;
+    if (!X) { box.style.display = 'none'; return; }
+    const used = Math.max(-1, ...build.pieces.filter((p) => p.parent === X.id).map((p) => p.ex || 0)) + 1;
+    const ins = [], swp = [];
     for (const t of ORDER) {
-      if (!getDef(t).exits.length) continue;
-      const nb = JSON.parse(JSON.stringify(build));
-      const nid = nb.nextId++, x = nb.pieces.find((p) => p.id === selectedPiece);
-      nb.pieces.splice(nb.pieces.indexOf(x), 0, { id: nid, type: t, parent: x.parent, ex: x.ex || 0 }); x.parent = nid; x.ex = 0;
-      if (!validateBuild(nb)) list.push(t);
+      if (getDef(t).exits.length) {
+        const nb = JSON.parse(JSON.stringify(build)), nid = nb.nextId++, x = nb.pieces.find((p) => p.id === selectedPiece);
+        nb.pieces.splice(nb.pieces.indexOf(x), 0, { id: nid, type: t, parent: x.parent, ex: x.ex || 0 }); x.parent = nid; x.ex = 0;
+        if (!fitEdit(nb)) ins.push(mkChip(t, null, (tt) => insertBefore(tt, selectedPiece)));
+      }
+      if (t !== X.type && getDef(t).exits.length >= used) {
+        const nb = JSON.parse(JSON.stringify(build)); nb.pieces.find((p) => p.id === selectedPiece).type = t;
+        if (!fitEdit(nb)) swp.push(mkChip(t, null, (tt) => swapPiece(tt, selectedPiece)));
+      }
     }
-  } else if (activeConn != null && connExit(activeConn)) {
-    mode = 'add';
-    for (const t of ORDER) if (validate(t, activeConn).ok) list.push(t);
+    if (!ins.length && !swp.length) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    if (ins.length) box.appendChild(chipRow('Add before it:', ins));
+    if (swp.length) box.appendChild(chipRow('Swap it for:', swp));
+    return;
   }
-  const total = mode === 'insert' ? ORDER.filter((t) => getDef(t).exits.length).length : ORDER.length;
-  if (!mode || !list.length || list.length === total) { box.style.display = 'none'; return; }
+  const list = [];
+  if (activeConn == null) { box.style.display = 'none'; return; }
+  for (const t of ORDER) if (validate(t, activeConn).ok) list.push(t);
+  if (!list.length || list.length === ORDER.length) { box.style.display = 'none'; return; }
   box.style.display = '';
-  const lab = document.createElement('span'); lab.className = 'chipLab'; lab.textContent = mode === 'insert' ? 'Insert before it:' : 'Fits here:';
-  box.appendChild(lab);
-  for (const t of list) {
-    const c = document.createElement('button'); c.className = 'chip';
-    c.innerHTML = `${iconSvg(t)}<span>${getDef(t).name}</span>`;
-    c.onclick = () => { ensureAudio(); if (mode === 'insert') insertBefore(t, selectedPiece); else place(t, activeConn); };
-    box.appendChild(c);
-  }
+  box.appendChild(chipRow('Fits here:', list.map((t) => mkChip(t, null, (tt) => place(tt, activeConn)))));
 }
 function updateHint() {
   const h = $('hintText'), btn = $('hintBtn');
-  btn.style.display = 'none';
+  btn.style.display = 'none'; $('hintBtn2').style.display = 'none';
   const name = selectedType ? getDef(selectedType).name : '';
   renderChips();
   if (selectedPiece != null) {
-    h.textContent = 'Piece selected. Remove it, or tap a piece below to insert it just before.'; btn.style.display = ''; btn.textContent = 'Remove it (and everything after)';
+    h.textContent = 'Piece selected. Add a piece before it, swap it, or remove it.'; btn.style.display = ''; btn.textContent = 'Remove it and everything after';
     btn.onclick = () => removePiece(selectedPiece);
+    const b2 = $('hintBtn2'); b2.style.display = ''; b2.textContent = 'Remove just this piece'; b2.onclick = () => removeJustThis(selectedPiece);
   } else if (selectedType) {
     h.textContent = ghost && !ghost.ok ? ghost.msg : `Tap a glowing ring to add a ${name}. Tap the piece again to cancel.`;
   } else if (!openConns().length) {
@@ -1248,6 +1321,12 @@ function updateTransport() {
   slider.style.setProperty('--p', `${(playhead / Math.max(1, head)) * 100}%`);
 }
 
+/* hide / show all the controls so a run can be watched full screen */
+$('uiToggle').onclick = () => {
+  const off = !document.body.classList.contains('clean');
+  document.body.classList.toggle('clean', off);
+  $('uiToggle').textContent = off ? '☰' : '👁'; $('uiToggle').title = off ? 'Show controls' : 'Hide controls';
+};
 /* ---------------------------------------------------------------- top bar buttons */
 $('btnUndo').onclick = undo;
 $('btnFrame').onclick = () => { riding = false; ['btnRide', 'btnRide2'].forEach((i) => $(i).classList.remove('on')); $('btnRide2').textContent = '🎥'; controls.enabled = true; frameAll(); };
@@ -1514,6 +1593,7 @@ async function boot() {
     sim(n) { while (n-- > 0 && !finished && (marbles.length || spawnQueue.length)) stepFrame(); playhead = head; },
     pieces() { return [...layout.values()].map((L) => ({ id: L.id, t: L.type, e: [L.E.x, L.E.y, L.E.z].map((v) => +v.toFixed(2)), x: L.exits.map((q) => [q.pos.x, q.pos.y, q.pos.z].map((v) => +v.toFixed(2))) })); },
     stitch(idx) { const items = idx.map((i) => LIBRARY[i]), r = stitchItems(items), b = buildFromSeq(r.seq, r.melody); loadBuild(b); return { pieces: b.pieces.length, clashes: clashPairs(b) }; },
+    select(id) { selectedPiece = id; highlight(); updateHint(); },
     load(i) { loadBuild(buildFromSeq(LIBRARY[i].seq, LIBRARY[i].melody)); }, drop: dropMarbles, validateLibrary() {
       return LIBRARY.map((it) => {
         const full = buildFromSeq(it.seq, it.melody);

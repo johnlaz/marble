@@ -24,8 +24,8 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .t:hover{background:rgba(37,99,235,.10)}.t:active{transform:scale(.96)}
 .t.on{background:var(--blue);color:#fff}
 #info{position:fixed;top:calc(var(--top-h,64px) + max(10px,env(safe-area-inset-top)) + 8px);left:50%;transform:translateX(-50%);width:max-content;max-width:min(860px,calc(100vw - 24px));display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;z-index:5}
-#hint{max-width:100%;padding:9px 16px;font-weight:650;font-size:14px;display:flex;gap:12px;align-items:center;text-align:center}
-#hint button{pointer-events:auto;background:#ef4444;color:#fff;padding:7px 12px;border-radius:10px;font-weight:700;font-size:13px;white-space:nowrap}
+#hint{max-width:100%;padding:9px 16px;font-weight:650;font-size:14px;flex-wrap:wrap;justify-content:center;display:flex;gap:12px;align-items:center;text-align:center}
+#hint button#hintBtn2{background:#334155}#hint button{pointer-events:auto;background:#ef4444;color:#fff;padding:7px 12px;border-radius:10px;font-weight:700;font-size:13px;white-space:nowrap}
 #stats{position:fixed;left:16px;top:calc(max(10px,env(safe-area-inset-top)) + 68px);font-size:12px;color:var(--mut);font-weight:700}
 #tray{position:fixed;left:12px;top:132px;bottom:12px;width:92px;padding:8px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;scrollbar-width:none}
 #tray::-webkit-scrollbar{display:none}
@@ -117,8 +117,9 @@ input[type=range]:disabled{opacity:.4}
   #hint{font-size:13px;padding:7px 12px}
 }
 }
-#chips{max-width:100%;padding:8px 10px;display:flex;gap:8px;align-items:center;overflow-x:auto;scrollbar-width:none;pointer-events:auto}
+#chips{max-width:100%;padding:8px 10px;display:flex;flex-direction:column;gap:6px;align-items:stretch;overflow-x:auto;scrollbar-width:none;pointer-events:auto}
 #chips::-webkit-scrollbar{display:none}
+.chiprow{display:flex;gap:8px;align-items:center;overflow-x:auto;scrollbar-width:none}.chiprow::-webkit-scrollbar{display:none}
 .chipLab{font-size:12px;font-weight:800;color:var(--mut);white-space:nowrap;padding:0 4px}
 .chip{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:0;padding:4px 6px 5px;border-radius:12px;background:#fff;border:2px solid #bfdbfe;font-size:10.5px;font-weight:800;color:#334155;box-shadow:0 1px 3px rgba(15,23,42,.12)}
 .chip:active{transform:scale(.94)}.chip:hover{border-color:var(--blue)}
@@ -146,7 +147,9 @@ body.night .x{background:#2f3873;color:#fff}
   .tools{max-width:calc(100vw - 80px)}
   #info{left:calc(50% - 6px);max-width:calc(100vw - 300px)}
 }
-}
+#uiToggle{position:fixed;right:6px;top:50%;transform:translateY(-50%);z-index:12;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.72);backdrop-filter:blur(6px);box-shadow:0 1px 6px rgba(15,23,42,.25);font-size:18px;display:flex;align-items:center;justify-content:center;opacity:.8}
+body.clean #top,body.clean #tray,body.clean #bar,body.clean #info,body.clean #stats,body.clean #toast{display:none!important}
+body.clean #uiToggle{opacity:.45}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 .mixrow{margin:16px 0 4px}.mixlab{display:flex;justify-content:space-between;align-items:baseline;font-size:15px}.mixlab output{font-weight:800;color:var(--blue);font-variant-numeric:tabular-nums}
 .mixrow input[type=range]{display:block;width:100%;margin:2px 0}.mixrow small{display:block;color:var(--mut);font-size:12px;margin-top:-2px}
@@ -178,9 +181,10 @@ body.riding .glass{background:rgba(255,255,255,.62)}
   </div>
 </div>
 
-<div id="info"><div id="hint" class="glass"><span id="hintText"></span><button id="hintBtn" style="display:none"></button></div>
+<div id="info"><div id="hint" class="glass"><span id="hintText"></span><button id="hintBtn" style="display:none"></button><button id="hintBtn2" style="display:none"></button></div>
 <div id="chips" class="glass" style="display:none"></div></div>
 <div id="stats"></div>
+<button id="uiToggle" title="Hide controls" aria-label="Hide or show controls">👁</button>
 <div id="tray" class="glass"></div>
 <div id="dragChip"></div>
 <div id="toast"></div>
