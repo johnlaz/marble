@@ -138,6 +138,14 @@ body.night .x{background:#2f3873;color:#fff}
   #info{left:calc(50% - 6px);max-width:calc(100vw - 440px)}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.mixrow{margin:16px 0 4px}.mixlab{display:flex;justify-content:space-between;align-items:baseline;font-size:15px}.mixlab output{font-weight:800;color:var(--blue);font-variant-numeric:tabular-nums}
+.mixrow input[type=range]{display:block;width:100%;margin:2px 0}.mixrow small{display:block;color:var(--mut);font-size:12px;margin-top:-2px}
+.mixreset{margin-top:14px;font:inherit;font-weight:800;font-size:14px;padding:10px 14px;border-radius:12px;border:0;background:#e2e8f0;color:var(--ink);cursor:pointer}
+/* ride-along: hide everything that is not needed so the view stays clear */
+body.riding #top .brand,body.riding #info,body.riding #tray,body.riding #stats{display:none!important}
+body.riding .tools .t:not(#btnRide):not(#btnSound){display:none}
+body.riding #bar .ctl+.ctl,body.riding #swatches,body.riding #btnDrop5,body.riding #bar .sep,body.riding #btnReset{display:none!important}
+body.riding .glass{background:rgba(255,255,255,.62)}
 </style>
 </head>
 <body>
@@ -206,9 +214,10 @@ body.night .x{background:#2f3873;color:#fff}
 <div class="modal" id="mixModal"><div class="sheet" style="width:min(420px,100%)">
   <button class="x" data-close>✕</button>
   <h2>Sound mix</h2><p>Drag to taste. Set to 0 to turn a sound off. Marbles need to be rolling to hear it.</p>
-  <label style="font-weight:800;font-size:14px">Marble clicks<input id="mix_hit" type="range" min="0" max="150" step="5"></label>
-  <label style="font-weight:800;font-size:14px">Rolling<input id="mix_roll" type="range" min="0" max="150" step="5"></label>
-  <label style="font-weight:800;font-size:14px">Music &amp; bells<input id="mix_music" type="range" min="0" max="100" step="5"></label>
+  <div class="mixrow"><div class="mixlab"><b>Marble clicks</b><output id="mixv_hit">0%</output></div><input id="mix_hit" type="range" min="0" max="150" step="5" aria-label="Marble clicks"><small>Hits when marbles touch the track</small></div>
+  <div class="mixrow"><div class="mixlab"><b>Rolling</b><output id="mixv_roll">0%</output></div><input id="mix_roll" type="range" min="0" max="150" step="5" aria-label="Rolling"><small>The soft rushing while they roll</small></div>
+  <div class="mixrow"><div class="mixlab"><b>Music &amp; bells</b><output id="mixv_music">0%</output></div><input id="mix_music" type="range" min="0" max="100" step="5" aria-label="Music &amp; bells"><small>Chimes, bells and melodies</small></div>
+  <button class="mixreset" id="mixReset">Reset to defaults</button>
 </div></div>
 
 <div class="modal" id="saveModal"><div class="sheet" style="width:min(420px,100%)">

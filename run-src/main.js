@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '0.5';
+const VERSION = '0.6';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -1248,8 +1248,11 @@ $('btnRide').onclick = () => {
   if (riding && !marbles.length) toast('Drop a marble, then ride along with it!');
   if (!riding) frameAll();
 };
-$('btnMix').onclick = () => { for (const k of ['hit', 'roll', 'music']) $('mix_' + k).value = mix[k]; $('mixModal').classList.add('on'); };
-for (const k of ['hit', 'roll', 'music']) $('mix_' + k).oninput = (e) => { mix[k] = +e.target.value; localStorage.setItem('marble.mix', JSON.stringify(mix)); if (k === 'hit') marbleClick(0.6); if (k === 'music') tone(523.25, 0.5, 0.16, 'sine', 0, [[1, 1], [2.01, 0.28]]); };
+const MIX_DEFAULTS = { hit: 70, roll: 35, music: 100 };
+function showMix(k) { const el = $('mix_' + k); $('mixv_' + k).textContent = Math.round(mix[k] / (+el.max) * 100) + '%'; el.style.setProperty('--p', (mix[k] / (+el.max) * 100) + '%'); }
+$('btnMix').onclick = () => { for (const k of ['hit', 'roll', 'music']) { $('mix_' + k).value = mix[k]; showMix(k); } $('mixModal').classList.add('on'); };
+$('mixReset').onclick = () => { for (const k of ['hit', 'roll', 'music']) { mix[k] = MIX_DEFAULTS[k]; $('mix_' + k).value = mix[k]; showMix(k); } localStorage.setItem('marble.mix', JSON.stringify(mix)); marbleClick(0.6); };
+for (const k of ['hit', 'roll', 'music']) $('mix_' + k).oninput = (e) => { mix[k] = +e.target.value; showMix(k); localStorage.setItem('marble.mix', JSON.stringify(mix)); if (k === 'hit') marbleClick(0.6); if (k === 'music') tone(523.25, 0.5, 0.16, 'sine', 0, [[1, 1], [2.01, 0.28]]); };
 $('btnSound').onclick = () => { soundOn = !soundOn; localStorage.setItem('marble.sound', soundOn ? '1' : '0'); $('btnSound').textContent = soundOn ? '🔊' : '🔇'; ensureAudio(); blip(600); };
 $('btnSound').textContent = soundOn ? '🔊' : '🔇';
 $('btnTheme').onclick = () => { themeIdx = (themeIdx + 1) % THEMES.length; localStorage.setItem('marble.theme', themeIdx); applyTheme(); toast(`Scenery: ${THEMES[themeIdx].name}`); };
@@ -1407,6 +1410,7 @@ function frame() {
     }
   }
   updateRoll(dt);
+  if (document.body.classList.contains('riding') !== riding) document.body.classList.toggle('riding', riding);
   const nf = Math.floor(playhead);
   if (dir > 0 && nf > soundF && nf - soundF < 40) playEventsBetween(soundF, nf);
   soundF = nf;
