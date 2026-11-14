@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '1.0';
+const VERSION = '1.1';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -1207,8 +1207,6 @@ $('btnDrop').onclick = () => dropMarbles(1);
 $('btnDrop5').onclick = () => dropMarbles(5);
 $('btnPlay').onclick = togglePlay;
 $('btnRev').onclick = reversePlay;
-$('btnStepB').onclick = () => { dir = 0; playhead = Math.max(0, Math.floor(playhead) - 1); };
-$('btnStepF').onclick = () => { dir = 0; playhead = Math.min(head, Math.floor(playhead) + 1); };
 $('btnReset').onclick = () => { clearRun(); rebuild(); };
 document.querySelectorAll('.spd').forEach((b) => b.onclick = () => {
   speed = +b.dataset.s;
@@ -1234,17 +1232,18 @@ function updateTransport() {
   $('btnPlay').textContent = dir === 1 ? '❚❚' : '▶';
   $('btnPlay').setAttribute('aria-label', dir === 1 ? 'Pause' : 'Play');
   $('btnRev').classList.toggle('on', dir === -1);
-  for (const id of ['btnPlay', 'btnRev', 'btnStepB', 'btnStepF']) $(id).disabled = !has;
+  for (const id of ['btnPlay', 'btnRev']) $(id).disabled = !has;
   slider.style.setProperty('--p', `${(playhead / Math.max(1, head)) * 100}%`);
 }
 
 /* ---------------------------------------------------------------- top bar buttons */
 $('btnUndo').onclick = undo;
-$('btnFrame').onclick = () => { riding = false; ['btnRide', 'btnRide2'].forEach((i) => $(i).classList.remove('on')); controls.enabled = true; frameAll(); };
+$('btnFrame').onclick = () => { riding = false; ['btnRide', 'btnRide2'].forEach((i) => $(i).classList.remove('on')); $('btnRide2').textContent = '🎥'; controls.enabled = true; frameAll(); };
 $('btnHigher').onclick = raiseAll;
 $('btnNew').onclick = () => { loadBuild(newBuild(9)); };
 function setRide(on) {
   riding = on; ['btnRide', 'btnRide2'].forEach((i) => $(i).classList.toggle('on', riding)); controls.enabled = !riding;
+  $('btnRide2').textContent = riding ? '🌍' : '🎥'; $('btnRide2').title = riding ? 'Back to the whole run' : 'Ride along with the marble';
   if (riding && !marbles.length) toast('Drop a marble, then ride along with it!');
   if (!riding) frameAll(); /* leaving ride always pulls back to the whole run */
 }
