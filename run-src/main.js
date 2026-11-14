@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '1.2';
+const VERSION = '1.3';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -982,6 +982,16 @@ function removePiece(id) {
   selectedPiece = null;
   rebuild(); activeConn = rp.parent * 4 + (rp.ex || 0); rebuildMarkers(); blip(300, 0.1, 0.05);
 }
+function reopenEnds() {
+  const ends = build.pieces.filter((p) => (p.type === 'end' || p.type === 'loop') && !hasChild(p.id));
+  if (!ends.length) return;
+  snapshot();
+  const kill = new Set(ends.map((p) => p.id));
+  build.pieces = build.pieces.filter((p) => !kill.has(p.id));
+  selectedPiece = null; rebuild();
+  activeConn = openConns().slice(-1)[0] ?? null; rebuildMarkers(); updateHint(); blip(420, 0.08, 0.05);
+  toast('End removed. Add pieces, then close it again with a Finish piece.');
+}
 function undo() {
   if (!undoStack.length) return;
   build = JSON.parse(undoStack.pop()); selectedPiece = null; activeConn = null; selectedType = null;
@@ -1044,7 +1054,9 @@ function updateHint() {
   } else if (selectedType) {
     h.textContent = ghost && !ghost.ok ? ghost.msg : `Tap a glowing ring to add a ${name}. Tap the piece again to cancel.`;
   } else if (!openConns().length) {
-    h.textContent = 'This run is closed. Press Drop marble!';
+    const ends = build.pieces.filter((p) => (p.type === 'end' || p.type === 'loop') && !hasChild(p.id));
+    h.textContent = 'This run is closed. Press Drop marble, or reopen the end to keep building.';
+    if (ends.length) { btn.style.display = ''; btn.textContent = 'Reopen the end'; btn.onclick = reopenEnds; }
   } else {
     h.textContent = 'Tap a suggested piece, or pick one and tap a glowing ring – or drag it right onto one.';
   }
