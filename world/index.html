@@ -245,9 +245,9 @@
 
       <!-- Right Group: Marble Cam + Speed + Sound -->
       <div class="flex items-center gap-1 sm:gap-1.5 pointer-events-auto">
-        <button id="btn-ride-cam" title="First-Person Marble Cam" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 border-2 border-indigo-300">
-          <span class="text-lg sm:text-xl">🎢</span>
-          <span id="ride-cam-label" class="hidden md:inline">Marble Cam</span>
+        <button id="btn-ride-cam" title="Ride along with the marble" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 border-2 border-indigo-300">
+          <span class="text-lg sm:text-xl">🎥</span>
+          <span id="ride-cam-label" class="hidden md:inline">Ride Along</span>
         </button>
 
         <button id="btn-speed" title="Marble Speed" class="btn-tactile h-11 sm:h-12 px-2 sm:px-3 rounded-2xl bg-white/95 backdrop-blur-md text-slate-800 font-extrabold text-xs sm:text-sm flex items-center gap-1 border-2 border-sky-200">
@@ -266,23 +266,6 @@
       Tap a track piece below to snap it onto the glowing green ring!
     </div>
   </header>
-
-  <!-- FIRST-PERSON MARBLE CAM STEERING PADS (Visible only in Ride Mode, safely above bottom bars) -->
-  <div id="ride-controls" class="hidden fixed inset-x-0 bottom-56 sm:bottom-60 z-20 px-4 sm:px-8 flex items-center justify-between pointer-events-none">
-    <button id="steer-left" class="btn-tactile pointer-events-auto w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-white/85 active:bg-amber-300 backdrop-blur-md border-4 border-sky-400 flex flex-col items-center justify-center shadow-2xl">
-      <span class="text-3xl sm:text-4xl">⬅️</span>
-      <span class="text-xs sm:text-sm font-black text-slate-800 uppercase">Left</span>
-    </button>
-
-    <div class="bg-slate-900/75 text-white px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold tracking-wide backdrop-blur-sm border border-white/20">
-      Steer Marble Side-to-Side!
-    </div>
-
-    <button id="steer-right" class="btn-tactile pointer-events-auto w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-white/85 active:bg-amber-300 backdrop-blur-md border-4 border-sky-400 flex flex-col items-center justify-center shadow-2xl">
-      <span class="text-3xl sm:text-4xl">➡️</span>
-      <span class="text-xs sm:text-sm font-black text-slate-800 uppercase">Right</span>
-    </button>
-  </div>
 
   <!-- COMPACT LIVE RUN BAR + ON-DEMAND REWIND SCRUBBER TOGGLE -->
   <section id="timeline-panel" class="hidden fixed bottom-0 left-0 right-0 z-30 px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-3 pointer-events-none">
@@ -1024,7 +1007,7 @@
           name: 'Twin-Route Splitter Race',
           badge: '🔀 2 Paths',
           badgeColor: 'bg-teal-600',
-          desc: 'A Y-Splitter divides marbles down two separate spirals, paddle wheels & chimes! Steer Left/Right in Marble Cam!',
+          desc: 'A Y-Splitter divides marbles down two separate spirals, paddle wheels & chimes! Try Ride Along to watch a marble choose its way down!',
           startPos: new THREE.Vector3(0, 18.0, -7.5),
           startYaw: 0,
           melody: null,
@@ -2433,6 +2416,41 @@
         showToast('🛸 Track completed & closed with Hyper-Loop Return! Hit Drop for an endless run!');
       }
 
+      // Move one piece somewhere else. The pieces after it close up the gap (they stay attached to the piece before it),
+      // and every stored parent number is renumbered so nothing points at the wrong piece.
+      function moveNodeToSocket(idx, sock) {
+        const node = trackNodes[idx];
+        if (!node || idx < 1 || !sock) return false;
+        if (sock.isSplice && sock.replaceNodeIndex === idx) return false;
+        const par = node.parentIndex, br = node.branch || 0;
+        const doomed = new Set([idx]);
+        const markBelow = (p) => trackNodes.forEach((n, i) => { if (n.parentIndex === p && !doomed.has(i)) { doomed.add(i); markBelow(i); } });
+        // a splitter can only hand its first branch on; its second branch (and everything on it) goes away with it
+        trackNodes.forEach((n, i) => { if (n.parentIndex === idx && (n.branch || 0) > 0) { doomed.add(i); markBelow(i); } });
+        const sockOwner = sock.isSplice ? sock.replaceNodeIndex : sock.parentIndex;
+        if (doomed.has(sockOwner) && sockOwner !== idx) return false;
+        trackNodes.forEach((n) => { if (n.parentIndex === idx && (n.branch || 0) === 0) { n.parentIndex = par; n.branch = br; } });
+        const map = new Map(), kept = [];
+        trackNodes.forEach((n, i) => { if (!doomed.has(i)) { map.set(i, kept.length); kept.push(n); } });
+        kept.forEach((n) => { if (n.parentIndex >= 0) n.parentIndex = map.get(n.parentIndex); });
+        trackNodes = kept;
+        // close the gap: lay the pieces that followed out again from where the moved piece used to join on
+        const pIdx = map.get(par), pn = trackNodes[pIdx], pd = pn && TRACK_DEFS[pn.type];
+        if (pd) {
+          const up = new THREE.Vector3(0, 1, 0);
+          if (pd.isSplitter && pd.exits && pd.exits[br]) shiftSubtreeTransform(pIdx, br, pn.pos.clone().add(pd.exits[br].pos.clone().applyAxisAngle(up, pn.yaw)), pn.yaw + pd.exits[br].yaw);
+          else if (pd.exitPos) shiftSubtreeTransform(pIdx, 0, pn.pos.clone().add(pd.exitPos.clone().applyAxisAngle(up, pn.yaw)), pn.yaw + (pd.exitYaw || 0));
+        }
+        // find the same target again (its position may have moved with the track)
+        const key = sock.isSplice ? `splice:${map.get(sock.replaceNodeIndex)}` : `${map.get(sock.parentIndex)}:${sock.branch || 0}`;
+        const fresh = getAllTargetSockets().find((t) => t.key === key);
+        const movedType = node.type;
+        if (!fresh) { targetedSocket = null; rebuildVisualTrackAndPins(); return false; }
+        targetedSocket = fresh;
+        snapNewPiece(movedType);
+        return true;
+      }
+
       function undoLastPiece() {
         sound.unlock();
         if (simState !== 'build') clearMarbles();
@@ -3197,7 +3215,6 @@
       });
 
       // First-Person Marble Cam Toggle
-      const rideControls = document.getElementById('ride-controls');
       const rideCamLabel = document.getElementById('ride-cam-label');
       const btnRideCam = document.getElementById('btn-ride-cam');
 
@@ -3207,13 +3224,11 @@
           if (simState === 'build' || activeMarbles.length === 0) {
             dropMarbles(1);
           }
-          rideControls.classList.remove('hidden');
-          rideCamLabel.textContent = 'Exit Cam';
+          rideCamLabel.textContent = 'Exit Ride';
           btnRideCam.classList.replace('bg-indigo-600', 'bg-amber-500');
-          showToast('🎢 Marble Cam Active! Tap LEFT or RIGHT to steer!');
+          showToast('🎥 Riding along! Sit back and watch the marble go.');
         } else {
-          rideControls.classList.add('hidden');
-          rideCamLabel.textContent = 'Marble Cam';
+          rideCamLabel.textContent = 'Ride Along';
           btnRideCam.classList.replace('bg-amber-500', 'bg-indigo-600');
           steerInput = 0;
           updateOrbitCamera();
@@ -3223,29 +3238,6 @@
       btnRideCam.addEventListener('click', () => {
         sound.unlock();
         setRideCam(!isRideCam);
-      });
-
-      // Steering Pad Touch & Mouse Hold Events
-      const steerLeftBtn = document.getElementById('steer-left');
-      const steerRightBtn = document.getElementById('steer-right');
-
-      const bindSteerHold = (el, dir) => {
-        const start = (e) => { e.preventDefault(); steerInput = dir; };
-        const end = (e) => { e.preventDefault(); if (steerInput === dir) steerInput = 0; };
-        el.addEventListener('pointerdown', start);
-        el.addEventListener('pointerup', end);
-        el.addEventListener('pointerleave', end);
-        el.addEventListener('pointercancel', end);
-      };
-      bindSteerHold(steerLeftBtn, 1);
-      bindSteerHold(steerRightBtn, -1);
-
-      window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') steerInput = 1;
-        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') steerInput = -1;
-      });
-      window.addEventListener('keyup', (e) => {
-        if (['ArrowLeft', 'a', 'A', 'ArrowRight', 'd', 'D'].includes(e.key)) steerInput = 0;
       });
 
       // Timeline Rewind & Scrubbing Controls
@@ -3454,10 +3446,8 @@
           removeDragBadge();
 
           if (nearSock && nearSock.parentIndex !== movedNodeIdx) {
-            trackNodes.splice(movedNodeIdx, 1);
-            targetedSocket = nearSock;
-            snapNewPiece(movedType);
-            showToast(`✨ Moved ${TRACK_DEFS[movedType].name} to new branch!`);
+            if (moveNodeToSocket(movedNodeIdx, nearSock)) showToast(`✨ Moved ${TRACK_DEFS[movedType].name} to new spot!`);
+            else { updateGhostAndSocket(); showToast("That piece can't go there."); }
           } else {
             updateGhostAndSocket();
           }
