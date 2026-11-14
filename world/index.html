@@ -194,6 +194,16 @@
       animation: pulsePop 2.4s infinite ease-in-out;
     }
   </style>
+  <style>
+    /* narrow phones: slimmer top bar so every button fits */
+    @media (max-width: 480px) {
+      header .btn-tactile { height: 38px !important; padding-left: 7px !important; padding-right: 7px !important; font-size: 12px !important; border-radius: 14px !important; min-width: 0 !important; }
+      header #btn-sound { width: 38px !important; }
+      header .flex.items-center { gap: 3px !important; }
+      header #speed-label { display: none !important; }
+      header .btn-tactile span { font-size: 15px !important; }
+    }
+  </style>
 </head>
 <body>
   <!-- 3D WebGL Viewport -->
@@ -1190,7 +1200,7 @@
       scene.background = new THREE.Color(0xdbeafe);
       scene.fog = new THREE.FogExp2(0xdbeafe, 0.0085);
 
-      const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 340);
+      const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 2400);
 
       const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1220,6 +1230,7 @@
       dirLight.shadow.camera.bottom = -d;
       dirLight.shadow.bias = -0.0005;
       scene.add(dirLight);
+      scene.add(dirLight.target);
 
       const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
       rimLight.position.set(-20, 15, -18);
@@ -1251,12 +1262,14 @@
         const tex = new THREE.CanvasTexture(c);
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(8, 8);
+        tex.repeat.set(8 * 900 / 48, 8 * 900 / 48);
+        tex.anisotropy = 8;
         return tex;
       }
 
       // Playroom Tabletop & Duplo Stud Baseplate
-      const floorGeo = new THREE.CylinderGeometry(48, 48, 1.2, 64);
+      const TABLE_R = 900;
+      const floorGeo = new THREE.CylinderGeometry(TABLE_R, TABLE_R, 1.2, 96);
       const floorMat = new THREE.MeshStandardMaterial({
         map: createWoodFloorTexture(),
         roughness: 0.78,
@@ -1281,22 +1294,66 @@
       matRim.receiveShadow = true;
       scene.add(matRim);
 
-      // Instanced Duplo Studs across the play mat
-      const studCount = 14 * 14;
-      const studGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.18, 16);
+      // Instanced Duplo studs across the play mat. The mat grows with the build (see growPlayfield).
+      const STUD_PITCH = 1.8, MAX_STUDS = 16000;
+      const studGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.18, 12);
       const studMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.38 });
-      const studInst = new THREE.InstancedMesh(studGeo, studMat, studCount);
-      studInst.receiveShadow = true;
-      const dummy = new THREE.Object3D();
-      let sIdx = 0;
-      for (let ix = 0; ix < 14; ix++) {
-        for (let iz = 0; iz < 14; iz++) {
-          dummy.position.set(-11.7 + ix * 1.8, 0.42, -11.7 + iz * 1.8);
-          dummy.updateMatrix();
-          studInst.setMatrixAt(sIdx++, dummy.matrix);
+      let studInst = null;
+      const matCells = { i0: 0, i1: -1, j0: 0, j1: -1 };
+      function buildStuds(i0, i1, j0, j1) {
+        if (studInst) { scene.remove(studInst); studInst.dispose && studInst.dispose(); }
+        const nx = i1 - i0 + 1, nz = j1 - j0 + 1;
+        // keep the stud count bounded: past the cap, only the cells around the middle of the mat get studs
+        let ci0 = i0, ci1 = i1, cj0 = j0, cj1 = j1;
+        if (nx * nz > MAX_STUDS) {
+          const half = Math.floor(Math.sqrt(MAX_STUDS) / 2), cx = Math.floor((i0 + i1) / 2), cz = Math.floor((j0 + j1) / 2);
+          ci0 = Math.max(i0, cx - half); ci1 = Math.min(i1, cx + half - 1); cj0 = Math.max(j0, cz - half); cj1 = Math.min(j1, cz + half - 1);
         }
+        const count = (ci1 - ci0 + 1) * (cj1 - cj0 + 1);
+        studInst = new THREE.InstancedMesh(studGeo, studMat, count);
+        studInst.receiveShadow = true;
+        const dummy = new THREE.Object3D();
+        let k = 0;
+        for (let ix = ci0; ix <= ci1; ix++) for (let iz = cj0; iz <= cj1; iz++) {
+          dummy.position.set((ix + 0.5) * STUD_PITCH, 0.42, (iz + 0.5) * STUD_PITCH);
+          dummy.updateMatrix();
+          studInst.setMatrixAt(k++, dummy.matrix);
+        }
+        scene.add(studInst);
       }
-      scene.add(studInst);
+      const camGoal = { x: 0, z: 0 };
+      let playfieldExtent = 14;
+      function growPlayfield() {
+        // size the mat to the track: every piece plus a margin, rounded up in steps so it does not rebuild on every click
+        let minX = 0, maxX = 0, minZ = 0, maxZ = 0;
+        for (const n of trackNodes) { minX = Math.min(minX, n.pos.x); maxX = Math.max(maxX, n.pos.x); minZ = Math.min(minZ, n.pos.z); maxZ = Math.max(maxZ, n.pos.z); }
+        const M = 7, STEP = 4;
+        const i0 = Math.min(-8, -Math.ceil((-(minX - M) / STUD_PITCH) / STEP) * STEP);
+        const i1 = Math.max(7, Math.ceil(((maxX + M) / STUD_PITCH) / STEP) * STEP - 1);
+        const j0 = Math.min(-8, -Math.ceil((-(minZ - M) / STUD_PITCH) / STEP) * STEP);
+        const j1 = Math.max(7, Math.ceil(((maxZ + M) / STUD_PITCH) / STEP) * STEP - 1);
+        if (i0 !== matCells.i0 || i1 !== matCells.i1 || j0 !== matCells.j0 || j1 !== matCells.j1) {
+          Object.assign(matCells, { i0, i1, j0, j1 });
+          const W = (i1 - i0 + 1) * STUD_PITCH + 1.8, D = (j1 - j0 + 1) * STUD_PITCH + 1.8;
+          const cx = ((i0 + i1 + 1) / 2) * STUD_PITCH, cz = ((j0 + j1 + 1) / 2) * STUD_PITCH;
+          matBase.scale.set(W / 27, 1, D / 27); matBase.position.set(cx, 0.18, cz);
+          matRim.scale.set((W + 1) / 28, 1, (D + 1) / 28); matRim.position.set(cx, 0.14, cz);
+          buildStuds(i0, i1, j0, j1);
+          // shadows, fog and zoom range follow the size of the build
+          playfieldExtent = Math.max(W, D, 28) / 2;
+          const sd = Math.max(24, Math.min(160, playfieldExtent + 10));
+          dirLight.shadow.camera.left = -sd; dirLight.shadow.camera.right = sd; dirLight.shadow.camera.top = sd; dirLight.shadow.camera.bottom = -sd;
+          dirLight.shadow.camera.far = 90 + sd * 2; dirLight.shadow.camera.updateProjectionMatrix();
+          const big = sd > 30;
+          dirLight.shadow.mapSize.set(big ? 4096 : 2048, big ? 4096 : 2048);
+          if (dirLight.shadow.map) { dirLight.shadow.map.dispose(); dirLight.shadow.map = null; }
+          scene.fog.density = 0.0085 / Math.max(1, playfieldExtent / 18);
+        }
+        // keep the light's shadow window and the camera's focus on the middle of the build
+        const mx = (minX + maxX) / 2, mz = (minZ + maxZ) / 2;
+        camGoal.x = mx; camGoal.z = mz;
+        dirLight.position.set(mx + 18, 32 + playfieldExtent * 0.5, mz + 22); dirLight.target.position.set(mx, 0, mz); dirLight.target.updateMatrixWorld();
+      }
 
       // Decorative Playroom Toy Blocks around perimeter
       [
@@ -1327,7 +1384,7 @@
 
       function updateOrbitCamera() {
         camPhi = Math.max(0.22, Math.min(Math.PI * 0.46, camPhi));
-        camRadius = Math.max(10, Math.min(95, camRadius));
+        camRadius = Math.max(10, Math.min(Math.max(95, playfieldExtent * 3.2), camRadius));
 
         const sinPhi = Math.sin(camPhi);
         camera.position.set(
@@ -1808,6 +1865,7 @@
       }
 
       function rebuildVisualTrackAndPins() {
+        try { growPlayfield(); } catch (e) { console.warn('playfield', e); }
         while (trackGroup.children.length) trackGroup.remove(trackGroup.children[0]);
         while (propsGroup.children.length) propsGroup.remove(propsGroup.children[0]);
         bowlingPins = [];
@@ -3460,6 +3518,11 @@
 
           camera.position.copy(smoothCamPos);
           camera.lookAt(smoothLookAt);
+        } else if (Math.abs(camTarget.x - camGoal.x) + Math.abs(camTarget.z - camGoal.z) > 0.02) {
+          // glide the orbit centre to the middle of a growing build
+          const k = 1 - Math.pow(0.02, dt);
+          camTarget.x += (camGoal.x - camTarget.x) * k; camTarget.z += (camGoal.z - camTarget.z) * k;
+          updateOrbitCamera();
         }
       }
 
@@ -3514,6 +3577,7 @@
       // Initialize App with Default Grand Helix Palace Build
       renderPiecePalette();
       loadPreset('grand_helix');
+      try { growPlayfield(); } catch (e) { console.warn(e); }
       requestAnimationFrame(animate);
     });
   </script>
