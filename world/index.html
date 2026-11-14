@@ -3751,5 +3751,27 @@
       requestAnimationFrame(animate);
     });
   </script>
+<script>
+/* Update banner: the service worker tells open pages when a newer version has been downloaded */
+(function(){
+  if(!('serviceWorker' in navigator)) return;
+  var shown=false;
+  function banner(){
+    if(shown) return; shown=true;
+    var d=document.createElement('div');
+    d.setAttribute('role','status');
+    d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:max(16px,env(safe-area-inset-bottom));z-index:99999;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 16px;border-radius:16px;background:#0f172a;color:#fff;font:700 14px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.35);max-width:calc(100vw - 24px)';
+    d.innerHTML='<span>✨ New version ready</span><button style="font:800 14px system-ui,sans-serif;border:0;border-radius:10px;padding:8px 14px;background:#ff5a36;color:#fff;cursor:pointer">Reload</button><button aria-label="Dismiss" style="border:0;background:none;color:#94a3b8;font:700 18px system-ui,sans-serif;cursor:pointer;padding:0 4px">×</button>';
+    var b=d.querySelectorAll('button');
+    b[0].onclick=function(){location.reload()}; b[1].onclick=function(){d.remove()};
+    document.body.appendChild(d);
+  }
+  navigator.serviceWorker.addEventListener('message',function(e){if(e.data&&e.data.type==='marble-update')banner()});
+  var had=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange',function(){if(had)banner();had=true});
+  addEventListener('load',function(){navigator.serviceWorker.register('../sw.js').then(function(r){r.update&&r.update()}).catch(function(){})});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)navigator.serviceWorker.getRegistration('../').then(function(r){r&&r.update()}).catch(function(){})});
+})();
+</script>
 </body>
 </html>
