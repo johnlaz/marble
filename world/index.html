@@ -203,6 +203,8 @@
       header #speed-label { display: none !important; }
       header .btn-tactile span { font-size: 15px !important; }
     }
+    /* ride along: hide everything that is not needed for watching */
+    body.riding #builder-dock, body.riding #btn-presets, body.riding #btn-marble-style, body.riding #btn-theme-toggle, body.riding #btn-drop-multi, body.riding #toast-banner { display: none !important; }
   </style>
 </head>
 <body>
@@ -3220,6 +3222,7 @@
 
       function setRideCam(enabled) {
         isRideCam = enabled;
+        document.body.classList.toggle('riding', enabled);
         if (isRideCam) {
           if (simState === 'build' || activeMarbles.length === 0) {
             dropMarbles(1);
