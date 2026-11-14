@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#cfe3fb">
+<title>Marble Games</title>
+<style>
+:root{--ink:#0f172a;--mut:#64748b;--blue:#2563eb;--acc:#ff5a36;font-family:ui-rounded,"SF Pro Rounded","Nunito","Segoe UI",system-ui,sans-serif;color:var(--ink)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%}
+body{min-height:100vh;background:linear-gradient(180deg,#cfe3fb 0%,#eaf1fb 55%,#f5f1e8 100%);display:flex;flex-direction:column;align-items:center;padding:max(28px,env(safe-area-inset-top)) 20px 20px}
+header{text-align:center;margin:18px 0 28px}
+.logo{display:flex;justify-content:center;gap:10px;margin-bottom:14px}
+.logo i{width:26px;height:26px;border-radius:50%;box-shadow:inset -4px -5px 8px rgba(0,0,0,.25),0 6px 10px rgba(15,23,42,.18)}
+.logo i:nth-child(1){background:radial-gradient(circle at 32% 28%,#fff 0 10%,#ef4444 40%,#7f1d1d)}
+.logo i:nth-child(2){background:radial-gradient(circle at 32% 28%,#fff 0 10%,#3b82f6 40%,#1e3a8a);transform:translateY(8px)}
+.logo i:nth-child(3){background:radial-gradient(circle at 32% 28%,#fff 0 10%,#22c55e 40%,#14532d)}
+.logo i:nth-child(4){background:radial-gradient(circle at 32% 28%,#fff 0 10%,#f59e0b 40%,#78350f);transform:translateY(8px)}
+h1{margin:0;font-size:clamp(32px,6vw,52px);letter-spacing:-.5px}
+header p{margin:8px 0 0;color:var(--mut);font-size:clamp(15px,2.4vw,18px);font-weight:600}
+main{width:min(900px,100%);display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;flex:1;align-content:start}
+.game{position:relative;display:flex;flex-direction:column;gap:6px;background:rgba(255,255,255,.88);border:1px solid rgba(15,23,42,.08);border-radius:26px;padding:22px;text-decoration:none;color:inherit;box-shadow:0 8px 30px rgba(15,23,42,.10);transition:transform .15s,box-shadow .15s}
+.game:hover{transform:translateY(-3px);box-shadow:0 14px 36px rgba(15,23,42,.16)}
+.game:active{transform:scale(.98)}
+.art{height:150px;border-radius:18px;margin-bottom:10px;background:#eef3fa;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.game h2{margin:0;font-size:24px}
+.game p{margin:0;color:var(--mut);font-size:15px;line-height:1.45}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px}
+.tags span{font-size:12px;font-weight:700;padding:4px 10px;border-radius:99px;background:#e2e8f0;color:#334155}
+.play{margin-top:auto;align-self:flex-start;background:var(--acc);color:#fff;font-weight:800;font-size:16px;padding:12px 24px;border-radius:16px;box-shadow:0 4px 14px rgba(255,90,54,.4)}
+.soon{pointer-events:none;opacity:.65;border-style:dashed}
+.soon .play{background:#94a3b8;box-shadow:none}
+footer{margin-top:30px;text-align:center;font-size:12px;color:var(--mut);font-weight:600;line-height:1.8}
+footer a{color:var(--blue);text-decoration:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <h1>Marble Games</h1>
+  <p>Pick a game and start rolling.</p>
+</header>
+
+<main>
+  <!-- GAME 1: Marble Run builder -->
+  <a class="game" href="run/">
+    <div class="art">
+      <svg viewBox="0 0 260 130" width="100%" height="100%" aria-hidden="true">
+        <path d="M20 22 L110 22 Q150 22 150 52 L150 78 Q150 108 190 108 L236 108" fill="none" stroke="#3b82f6" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M150 52 L150 78" fill="none" stroke="#f97316" stroke-width="13" stroke-linecap="round"/>
+        <circle cx="82" cy="12" r="8" fill="#ef4444"/><circle cx="82" cy="10" r="2.4" fill="#fff" opacity=".8"/>
+        <rect x="224" y="98" width="26" height="20" rx="6" fill="#ec4899"/>
+      </svg>
+    </div>
+    <h2>Marble Run</h2>
+    <p>Build your own marble run piece by piece, drop marbles in, then rewind and replay every roll.</p>
+    <div class="tags"><span>3D builder</span><span>Rewind &amp; replay</span><span>Ride along</span></div>
+    <span class="play">Play</span>
+  </a>
+
+  <!-- GAME 2: placeholder. When the game is added, put it in its own folder (e.g. game2/),
+       change href to that folder, rename the title/description, and delete class "soon". -->
+  <a class="game soon" href="#" aria-disabled="true">
+    <div class="art">
+      <svg viewBox="0 0 260 130" width="100%" height="100%" aria-hidden="true">
+        <circle cx="130" cy="65" r="34" fill="none" stroke="#94a3b8" stroke-width="10" stroke-dasharray="6 12" stroke-linecap="round"/>
+        <circle cx="130" cy="65" r="12" fill="#cbd5e1"/>
+      </svg>
+    </div>
+    <h2>Coming soon</h2>
+    <p>A second marble game is on its way.</p>
+    <div class="tags"><span>Coming soon</span></div>
+    <span class="play">Soon</span>
+  </a>
+</main>
+
+<footer>
+  &copy; 2026 LAZLAB Creations · <a href="mailto:lazlab.io@gmail.com?subject=Marble%20Games">Send a note</a>
+</footer>
+</body>
+</html>
