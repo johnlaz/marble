@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '0.9';
+const VERSION = '1.0';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -1240,14 +1240,16 @@ function updateTransport() {
 
 /* ---------------------------------------------------------------- top bar buttons */
 $('btnUndo').onclick = undo;
-$('btnFrame').onclick = () => { riding = false; $('btnRide').classList.remove('on'); controls.enabled = true; frameAll(); };
+$('btnFrame').onclick = () => { riding = false; ['btnRide', 'btnRide2'].forEach((i) => $(i).classList.remove('on')); controls.enabled = true; frameAll(); };
 $('btnHigher').onclick = raiseAll;
 $('btnNew').onclick = () => { loadBuild(newBuild(9)); };
-$('btnRide').onclick = () => {
-  riding = !riding; $('btnRide').classList.toggle('on', riding); controls.enabled = !riding;
+function setRide(on) {
+  riding = on; ['btnRide', 'btnRide2'].forEach((i) => $(i).classList.toggle('on', riding)); controls.enabled = !riding;
   if (riding && !marbles.length) toast('Drop a marble, then ride along with it!');
-  if (!riding) frameAll();
-};
+  if (!riding) frameAll(); /* leaving ride always pulls back to the whole run */
+}
+$('btnRide').onclick = () => setRide(!riding);
+$('btnRide2').onclick = () => setRide(!riding);
 const MIX_DEFAULTS = { hit: 70, roll: 35, music: 100 };
 function showMix(k) { const el = $('mix_' + k); $('mixv_' + k).textContent = Math.round(mix[k] / (+el.max) * 100) + '%'; el.style.setProperty('--p', (mix[k] / (+el.max) * 100) + '%'); }
 $('btnMix').onclick = () => { for (const k of ['hit', 'roll', 'music']) { $('mix_' + k).value = mix[k]; showMix(k); } $('mixModal').classList.add('on'); };
