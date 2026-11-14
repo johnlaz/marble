@@ -3207,7 +3207,7 @@
       const presetsGrid = document.getElementById('presets-grid');
 
       // ---- My builds (saved on this device) + version / contact ----
-      const WORLD_VERSION = '1.1';
+      const WORLD_VERSION = '1.2';
       const SAVE_KEY = 'marbleworld.saved';
       const savedBuilds = () => { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); } catch (_) { return []; } };
       function saveCurrentBuild() {
@@ -3286,7 +3286,7 @@
         }
         const foot = full(document.createElement('div'));
         foot.style.cssText += 'text-align:center;font-size:12px;font-weight:700;color:#94a3b8;margin-top:8px';
-        foot.innerHTML = `Marble World 3D v${WORLD_VERSION} · &copy; 2026 LAZLAB Creations · <a href="mailto:lazlab.io@gmail.com?subject=Marble%20World%203D" style="color:#2563eb;text-decoration:none">Send a note</a>`;
+        foot.innerHTML = `Marble World 3D v${WORLD_VERSION} · &copy; 2026 LAZLAB Creations · <a href="mailto:lazlab.io@gmail.com?subject=Marble%20World%203D" style="color:#2563eb;text-decoration:none">Send a note</a><br><a href="../" style="display:inline-block;margin-top:8px;padding:8px 16px;border-radius:12px;background:#e2e8f0;color:#334155;font-weight:900;font-size:14px;text-decoration:none">🏠 Marble home</a>`;
         presetsGrid.appendChild(foot);
       }
 
@@ -3667,8 +3667,24 @@
 
       // Main 60fps Animation Loop
       let lastTime = performance.now();
+      let frameErrors = 0;
       function animate(now) {
         requestAnimationFrame(animate);
+        try { animateFrame(now); frameErrors = 0; }
+        catch (err) {
+          console.warn('frame error', err);
+          lastTime = now;
+          // never let one bad frame hide the course: keep drawing, and after a few bad frames tidy up the marbles
+          try { renderer.render(scene, camera); } catch (_) {}
+          if (++frameErrors === 3) {
+            try { clearMarbles(); } catch (_) {}
+            try { rebuildVisualTrackAndPins(); } catch (_) {}
+            try { showToast('Marbles reset so you can keep building!'); } catch (_) {}
+            frameErrors = 0;
+          }
+        }
+      }
+      function animateFrame(now) {
         const dt = Math.min((now - lastTime) / 1000, 0.05);
         lastTime = now;
 
@@ -3713,6 +3729,21 @@
         renderer.render(scene, camera);
       }
 
+      // ---- Back-button guard: Android back closes a menu first, then asks once before leaving ----
+      (function () {
+        let armed = 0;
+        try { history.pushState({ mw: 1 }, ''); } catch (_) {}
+        const onBack = () => {
+          try { history.pushState({ mw: 1 }, ''); } catch (_) {}
+          if (presetsModal && !presetsModal.classList.contains('hidden')) { presetsModal.classList.add('hidden'); return; }
+          const mp = document.getElementById('merge-fix-popup');
+          if (mp && !mp.classList.contains('hidden')) { hideMergeFixPopup(); return; }
+          if (Date.now() - armed < 2500) { armed = 0; window.removeEventListener('popstate', onBack); history.go(-2); return; }
+          armed = Date.now();
+          showToast('Press back again to leave the game');
+        };
+        window.addEventListener('popstate', onBack);
+      })();
       // Initialize App with Default Grand Helix Palace Build
       renderPiecePalette();
       loadPreset('grand_helix');

@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '0.7';
+const VERSION = '0.8';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -1377,6 +1377,18 @@ const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&l
 function closeModals() { document.querySelectorAll('.modal').forEach((m) => m.classList.remove('on')); }
 document.querySelectorAll('[data-close]').forEach((b) => b.onclick = closeModals);
 document.querySelectorAll('.modal').forEach((m) => m.addEventListener('pointerdown', (e) => { if (e.target === m) closeModals(); }));
+/* back-button guard: back closes a menu first, then asks once before leaving */
+(() => {
+  let armed = 0;
+  try { history.pushState({ mr: 1 }, ''); } catch (e) {}
+  const onBack = () => {
+    try { history.pushState({ mr: 1 }, ''); } catch (e) {}
+    if (document.querySelector('.modal.on')) { closeModals(); return; }
+    if (Date.now() - armed < 2500) { armed = 0; window.removeEventListener('popstate', onBack); history.go(-2); return; }
+    armed = Date.now(); toast('Press back again to leave the game');
+  };
+  window.addEventListener('popstate', onBack);
+})();
 $('btnLib').onclick = () => { stitchMode = false; stitchSel = []; openLibrary(); };
 $('btnStitch').onclick = () => { stitchMode = !stitchMode; if (!stitchMode) stitchSel = []; updateStitchBar(); };
 $('stitchClear').onclick = () => { stitchSel = []; updateStitchBar(); };
