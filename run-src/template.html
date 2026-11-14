@@ -146,6 +146,7 @@ body.night .x{background:#2f3873;color:#fff}
     <button class="t" id="btnSave">💾<span>Save</span></button>
     <button class="t" id="btnNew">＋<span>New</span></button>
     <button class="t" id="btnTheme" aria-label="Scenery">🎨</button>
+    <button class="t" id="btnMix" aria-label="Sound mix">🎚<span>Mix</span></button>
     <button class="t" id="btnSound" aria-label="Sound">🔊</button>
   </div>
 </div>
@@ -189,6 +190,14 @@ body.night .x{background:#2f3873;color:#fff}
   <div class="grid" id="libGrid"></div>
   <h3 id="mineHead" style="display:none">My runs</h3>
   <div class="grid" id="mineGrid"></div>
+</div></div>
+
+<div class="modal" id="mixModal"><div class="sheet" style="width:min(420px,100%)">
+  <button class="x" data-close>✕</button>
+  <h2>Sound mix</h2><p>Drag to taste. Set to 0 to turn a sound off. Marbles need to be rolling to hear it.</p>
+  <label style="font-weight:800;font-size:14px">Marble clicks<input id="mix_hit" type="range" min="0" max="150" step="5"></label>
+  <label style="font-weight:800;font-size:14px">Rolling<input id="mix_roll" type="range" min="0" max="150" step="5"></label>
+  <label style="font-weight:800;font-size:14px">Music &amp; bells<input id="mix_music" type="range" min="0" max="100" step="5"></label>
 </div></div>
 
 <div class="modal" id="saveModal"><div class="sheet" style="width:min(420px,100%)">

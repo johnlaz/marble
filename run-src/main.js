@@ -707,6 +707,7 @@ function stepFrame() {
     if (m.pv) {
       const dv = Math.hypot(v.x - m.pv[0], v.y - m.pv[1], v.z - m.pv[2]);
       // a sudden change in velocity = the marble clicked against something (gravity alone changes it by ~0.17 per frame)
+      if (dv > 0.55 && head - (m.lastHit || -99) > 4) { m.lastHit = head; events.push({ f: head, kind: 'hit', v: Math.min(1, (dv - 0.55) / 3), c: m.color }); }
 
     }
     m.pv = [v.x, v.y, v.z];
@@ -810,62 +811,76 @@ function tone(freq, dur, vol, type = 'sine', when = 0, partials = [[1, 1]], swee
     const o = actx.createOscillator(), g = actx.createGain();
     o.type = type; o.frequency.setValueAtTime(freq * mul, t0);
     if (sweepTo) o.frequency.exponentialRampToValueAtTime(sweepTo * mul, t0 + dur);
-    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol * amp, t0 + 0.006);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * amp * (mix.music / 100)), t0 + 0.006);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.02);
   }
 }
-// real-marble sounds: a click when a marble hits something, and a soft rumble that follows how fast marbles roll
-let noiseBuf = null, roll = null;
-function noiseBuffer() {
-  if (noiseBuf) return noiseBuf;
-  noiseBuf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate);
-  const d = noiseBuf.getChannelData(0); let b = 0;
-  for (let i = 0; i < d.length; i++) { b = b * 0.6 + (Math.random() * 2 - 1) * 0.4; d[i] = b; }
-  return noiseBuf;
+// ---- realistic marble sounds -------------------------------------------------------------
+// Impacts: a dry "tock" (short damped tone) plus a bright glassy tick, louder for harder hits.
+// Rolling: not a hiss – a stream of tiny, random micro-ticks whose rate follows the marble's speed, like glass on a hard track.
+const mix = (() => { try { return Object.assign({ hit: 70, roll: 35, music: 100 }, JSON.parse(localStorage.getItem('marble.mix') || '{}')); } catch (_) { return { hit: 70, roll: 35, music: 100 }; } })();
+let tickBuf = null, masterOut = null;
+function audioOut() {
+  if (!masterOut) { const c = actx.createDynamicsCompressor(); c.threshold.value = -18; c.ratio.value = 6; c.connect(actx.destination); masterOut = c; }
+  return masterOut;
 }
-function marbleClick(vel) {
-  if (!soundOn) return; ensureAudio(); if (!actx) return;
-  const t0 = actx.currentTime, vol = 0.05 + vel * 0.16, f = 2300 + Math.random() * 900;
-  for (const [mul, amp, dur] of [[1, 1, 0.05], [1.62, 0.5, 0.035], [0.42, 0.7, 0.09]]) {
+function tickBuffer() {
+  if (tickBuf) return tickBuf;
+  const n = Math.floor(actx.sampleRate * 0.012);
+  tickBuf = actx.createBuffer(1, n, actx.sampleRate);
+  const d = tickBuf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (n * 0.16));
+  return tickBuf;
+}
+function marbleClick(vel, color) {
+  if (!soundOn || mix.hit <= 0) return; ensureAudio(); if (!actx) return;
+  const t0 = actx.currentTime, out = audioOut(), vol = (0.04 + vel * 0.2) * (mix.hit / 70);
+  const metal = color === 'chrome' || color === 'gold';
+  const base = (metal ? 2600 : 1500) * (0.85 + Math.random() * 0.3);
+  const parts = metal ? [[1, 1, 0.16], [2.76, 0.5, 0.1], [5.4, 0.25, 0.05]] : [[1, 1, 0.045], [2.3, 0.4, 0.025]];
+  for (const [mul, amp, dur] of parts) {
     const o = actx.createOscillator(), g = actx.createGain();
-    o.type = 'sine'; o.frequency.value = f * mul;
+    o.type = 'sine'; o.frequency.value = base * mul;
     g.gain.setValueAtTime(vol * amp, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.01);
+    o.connect(g).connect(out); o.start(t0); o.stop(t0 + dur + 0.01);
   }
-  const n = actx.createBufferSource(), ng = actx.createGain(), hp = actx.createBiquadFilter();
-  n.buffer = noiseBuffer(); hp.type = 'highpass'; hp.frequency.value = 3000;
-  ng.gain.setValueAtTime(vol * 0.5, t0); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.02);
-  n.connect(hp).connect(ng).connect(actx.destination); n.start(t0, Math.random()); n.stop(t0 + 0.03);
+  const n = actx.createBufferSource(), g = actx.createGain(), hp = actx.createBiquadFilter();
+  n.buffer = tickBuffer(); n.playbackRate.value = 0.8 + Math.random() * 0.5; hp.type = 'highpass'; hp.frequency.value = 2500;
+  g.gain.value = vol * 1.4;
+  n.connect(hp).connect(g).connect(out); n.start(t0);
 }
-let rollPrev = new Map();
+let rollPrev = new Map(), rollCarry = 0;
 function updateRoll(dt) {
-  if (!soundOn || !actx || actx.state !== 'running') { if (roll) roll.g.gain.value = 0; return; }
-  if (!roll) {
-    const src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain();
-    src.buffer = noiseBuffer(); src.loop = true; bp.type = 'bandpass'; bp.Q.value = 0.7; bp.frequency.value = 300; g.gain.value = 0;
-    src.connect(bp).connect(g).connect(actx.destination); src.start();
-    roll = { src, bp, g };
-  }
-  // how fast is the fastest visible marble moving along the track right now (works while rewinding too)
-  let best = 0;
-  if (dir !== 0) for (const m of marbles) {
+  if (!soundOn || !actx || actx.state !== 'running' || mix.roll <= 0 || dir === 0) { rollPrev.clear(); return; }
+  let rate = 0, loud = 0;
+  for (const m of marbles) {
     if (!m.mesh.visible) continue;
     const p = m.mesh.position, q = rollPrev.get(m);
     if (q && dt > 0) {
-      const sp = Math.hypot(p.x - q.x, p.z - q.z) / dt;       // horizontal speed: rolling, not falling
-      const fall = Math.abs(p.y - q.y) / dt;
-      if (fall < sp * 1.2 + 0.5) best = Math.max(best, Math.min(sp, 7));
+      const sp = Math.hypot(p.x - q.x, p.z - q.z) / dt, fall = Math.abs(p.y - q.y) / dt;
+      if (sp > 0.3 && fall < sp * 1.1 + 0.4 && p.y > 0.4) { const s = Math.min(sp, 7); rate += s * 22; loud = Math.max(loud, s / 7); }
     }
     rollPrev.set(m, p.clone());
-  } else rollPrev.clear();
-  const k = Math.min(1, best / 6), t = actx.currentTime;
-  roll.g.gain.setTargetAtTime(best > 0.25 ? 0.03 + k * 0.1 : 0, t, 0.06);
-  roll.bp.frequency.setTargetAtTime(260 + k * 900, t, 0.08);
+  }
+  rollCarry += Math.min(rate, 260) * dt * Math.max(0.25, speed);
+  const out = audioOut(), t0 = actx.currentTime;
+  let n = 0;
+  while (rollCarry >= 1 && n++ < 8) {
+    rollCarry -= 1;
+    const s = actx.createBufferSource(), g = actx.createGain(), bp = actx.createBiquadFilter();
+    s.buffer = tickBuffer(); s.playbackRate.value = 0.7 + Math.random() * 1.1;
+    bp.type = 'bandpass'; bp.frequency.value = 1400 + Math.random() * 2600 + loud * 800; bp.Q.value = 1.2;
+    g.gain.value = (0.012 + loud * 0.03) * (0.4 + Math.random() * 0.9) * (mix.roll / 35);
+    s.connect(bp).connect(g).connect(out); s.start(t0 + Math.random() * dt);
+  }
+  rollCarry = Math.min(rollCarry, 2);
 }
 function playEvent(ev) {
+  if (ev.kind === 'hit') { marbleClick(ev.v, ev.c); return; }
   if (ev.kind === 'note') { if (ev.freq) tone(ev.freq, 0.7, 0.16, 'sine', 0, [[1, 1], [2.01, 0.28], [4.1, 0.08]]); }
   else if (ev.kind === 'bell') tone(660, 1.6, 0.11, 'sine', 0, [[1, 1], [2.76, 0.45], [5.4, 0.25], [8.9, 0.1]]);
+  else if (ev.kind === 'goal') { marbleClick(0.45, ev.c); }
   else if (ev.kind === 'portal') blip(700, 0.12, 0.05);
 }
 function playEventsBetween(a, b) {
@@ -1198,6 +1213,8 @@ $('btnRide').onclick = () => {
   if (riding && !marbles.length) toast('Drop a marble, then ride along with it!');
   if (!riding) frameAll();
 };
+$('btnMix').onclick = () => { for (const k of ['hit', 'roll', 'music']) $('mix_' + k).value = mix[k]; $('mixModal').classList.add('on'); };
+for (const k of ['hit', 'roll', 'music']) $('mix_' + k).oninput = (e) => { mix[k] = +e.target.value; localStorage.setItem('marble.mix', JSON.stringify(mix)); if (k === 'hit') marbleClick(0.6); if (k === 'music') tone(523.25, 0.5, 0.16, 'sine', 0, [[1, 1], [2.01, 0.28]]); };
 $('btnSound').onclick = () => { soundOn = !soundOn; localStorage.setItem('marble.sound', soundOn ? '1' : '0'); $('btnSound').textContent = soundOn ? '🔊' : '🔇'; ensureAudio(); blip(600); };
 $('btnSound').textContent = soundOn ? '🔊' : '🔇';
 $('btnTheme').onclick = () => { themeIdx = (themeIdx + 1) % THEMES.length; localStorage.setItem('marble.theme', themeIdx); applyTheme(); toast(`Scenery: ${THEMES[themeIdx].name}`); };
@@ -1289,6 +1306,7 @@ function frame() {
       if (playhead > head) { playhead = head; if (finished || !marbles.length) dir = 0; }
     }
   }
+  updateRoll(dt);
   const nf = Math.floor(playhead);
   if (dir > 0 && nf > soundF && nf - soundF < 40) playEventsBetween(soundF, nf);
   soundF = nf;
