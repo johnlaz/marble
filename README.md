@@ -12,6 +12,7 @@ A small collection of marble games for kids, by LAZLAB Creations. The landing pa
 ```
 index.html      landing page (plain HTML, no service worker)
 run/index.html  Marble Run (single self-contained file, Three.js + Rapier physics inlined)
+run-src/        readable source + build script for Marble Run
 world/index.html  Marble World 3D (single file, CDN dependencies)
 README.md
 ```
@@ -27,4 +28,5 @@ Each game lives in its own folder so either can be edited and deployed without t
 
 - Works offline; no external requests.
 - Saved runs and the sound setting use `localStorage` in the browser.
-- Source (unbundled) lives outside this repo for now; `run/index.html` is the built output.
+- `run/index.html` is built output; edit the source in `run-src/` and rebuild (see `run-src/README.md`).
+- 14 prebuilt runs in the Library, each checked in a headless physics test.
