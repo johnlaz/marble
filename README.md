@@ -5,13 +5,14 @@ A small collection of marble games for kids, by LAZLAB Creations. The landing pa
 | Game | Folder | What it is |
 |---|---|---|
 | Marble Run | [`run/`](run/) | 3D marble run builder: snap pieces together, drop marbles, rewind and replay, ride along with a marble. |
-| Game 2 | _coming soon_ | Placeholder card on the landing page. |
+| Marble World 3D | [`world/`](world/) | Build a course, ride along with your marble, rewind. Loads Three.js, Tailwind and fonts from CDNs, so it needs an internet connection. |
 
 ## Layout
 
 ```
 index.html      landing page (plain HTML, no service worker)
 run/index.html  Marble Run (single self-contained file, Three.js + Rapier physics inlined)
+world/index.html  Marble World 3D (single file, CDN dependencies)
 README.md
 ```
 
@@ -19,8 +20,8 @@ Each game lives in its own folder so either can be edited and deployed without t
 
 ## Adding a game
 
-1. Drop the game into a new folder, e.g. `game2/index.html`.
-2. In the root `index.html`, edit the placeholder card: set `href` to the folder, update the title, description and tags, and remove the `soon` class.
+1. Drop the game into a new folder, e.g. `game3/index.html`.
+2. In the root `index.html`, copy one of the `<a class="game">` cards, point `href` at the folder, and update the title, description and tags.
 
 ## Notes on Marble Run
 

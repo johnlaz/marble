@@ -1,0 +1,3511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Marble World 3D" />
+  <title>Marble World 3D — Build, Ride &amp; Rewind</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Fredoka', 'Inter', sans-serif;
+      background: #dbeafe;
+      touch-action: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    /* Tactile Duplo/Toy-style 3D button press feedback */
+    .btn-tactile {
+      transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.1s ease, background-color 0.15s ease;
+      box-shadow: 0 5px 0 rgba(15, 23, 42, 0.18), 0 8px 16px rgba(15, 23, 42, 0.12);
+    }
+
+    .btn-tactile:active {
+      transform: translateY(4px) scale(0.97);
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.2), 0 3px 6px rgba(15, 23, 42, 0.1);
+    }
+
+    /* Oversized iPad-friendly Timeline Scrubber Range Input */
+    input[type="range"].timeline-scrubber {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 22px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #38bdf8 0%, #22c55e 100%);
+      outline: none;
+      cursor: pointer;
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    input[type="range"].timeline-scrubber::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 5px solid #0284c7;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.45);
+      cursor: grab;
+      transition: transform 0.12s ease;
+    }
+
+    input[type="range"].timeline-scrubber::-webkit-slider-thumb:active {
+      transform: scale(1.15);
+      cursor: grabbing;
+      border-color: #f59e0b;
+    }
+
+    input[type="range"].timeline-scrubber::-moz-range-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 5px solid #0284c7;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.45);
+      cursor: grab;
+    }
+
+    /* Custom clean scrollbar for preset drawer */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Orientation-Adaptive Builder Dock: Vertical Sidebar in Portrait, Bottom Bar in Landscape */
+    #builder-dock {
+      position: fixed;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    @media (orientation: portrait) {
+      #builder-dock {
+        top: calc(env(safe-area-inset-top, 0px) + 4.35rem);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+        left: calc(env(safe-area-inset-left, 0px) + 0.45rem);
+        width: auto;
+        display: flex;
+        align-items: center;
+      }
+      #builder-dock-inner {
+        flex-direction: column;
+        max-height: 100%;
+        width: 4.15rem;
+        padding: 0.4rem;
+      }
+      #piece-palette {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        overflow-y: auto;
+        overflow-x: hidden;
+        max-height: calc(100vh - 14.5rem);
+        width: 100%;
+        align-items: center;
+      }
+      #builder-actions {
+        flex-direction: column;
+        width: 100%;
+        padding-top: 0.35rem;
+        border-top: 2px solid #f1f5f9;
+      }
+      #btn-snap-piece {
+        width: 100%;
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+        font-size: 0.72rem;
+      }
+      #btn-undo-piece, #btn-clear-track {
+        width: 100%;
+      }
+    }
+
+    @media (orientation: landscape) {
+      #builder-dock {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 0.35rem 0.65rem max(0.5rem, env(safe-area-inset-bottom));
+      }
+      #builder-dock-inner {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        max-width: 72rem;
+        margin: 0 auto;
+        padding: 0.45rem 0.6rem;
+      }
+      #piece-palette {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        flex: 1 1 auto;
+      }
+      #builder-actions {
+        flex-direction: row;
+        flex-shrink: 0;
+      }
+    }
+
+    @keyframes pulsePop {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+    .animate-pop {
+      animation: pulsePop 2.4s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body>
+  <!-- 3D WebGL Viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- TOP COMMAND BAR (Responsive single-row layout across mobile, tablet & desktop) -->
+  <header class="fixed top-0 left-0 right-0 z-30 pointer-events-none px-2 pt-[max(0.45rem,env(safe-area-inset-top))] sm:px-3">
+    <div class="max-w-6xl mx-auto flex items-center justify-between gap-1 sm:gap-2">
+      <!-- Left Group: Builds Library + Marble Style + Theme Vibe -->
+      <div class="flex items-center gap-1 sm:gap-1.5 pointer-events-auto">
+        <button id="btn-presets" title="Starter Builds" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3.5 rounded-2xl bg-white/95 backdrop-blur-md text-slate-800 font-bold text-xs sm:text-sm flex items-center gap-1.5 border-2 border-sky-200">
+          <span class="text-lg sm:text-xl">🧱</span>
+          <span class="hidden md:inline">Builds</span>
+        </button>
+
+        <button id="btn-marble-style" title="Switch Marble Color" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3 rounded-2xl bg-white/95 backdrop-blur-md text-slate-800 font-bold text-xs sm:text-sm flex items-center gap-1.5 border-2 border-amber-200">
+          <span id="marble-preview-dot" class="w-5 h-5 sm:w-6 sm:h-6 rounded-full inline-block shadow-inner border border-white" style="background: radial-gradient(circle at 30% 30%, #fff, #ef4444 45%, #7f1d1d);"></span>
+          <span class="hidden lg:inline" id="marble-style-label">Ruby</span>
+        </button>
+
+        <button id="btn-theme-toggle" title="Switch World Theme" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3 rounded-2xl bg-white/95 backdrop-blur-md text-slate-800 font-bold text-xs sm:text-sm flex items-center gap-1 border-2 border-indigo-200">
+          <span id="theme-icon" class="text-lg sm:text-xl">☀️</span>
+          <span id="theme-label" class="hidden lg:inline">Daylight</span>
+        </button>
+      </div>
+
+      <!-- Center Group: Drop Controls -->
+      <div class="flex items-center gap-1 sm:gap-1.5 pointer-events-auto">
+        <button id="btn-drop-one" title="Drop Marble" class="btn-tactile h-11 sm:h-12 px-3 sm:px-5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold text-sm sm:text-base flex items-center gap-1.5 border-2 border-emerald-200">
+          <span class="text-lg sm:text-xl">🟢</span>
+          <span>Drop</span>
+        </button>
+
+        <button id="btn-drop-multi" title="Drop 3 Marbles" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs sm:text-sm flex items-center gap-1 border-2 border-amber-200">
+          <span class="text-base sm:text-lg">🔮</span>
+          <span>×3</span>
+        </button>
+      </div>
+
+      <!-- Right Group: Marble Cam + Speed + Sound -->
+      <div class="flex items-center gap-1 sm:gap-1.5 pointer-events-auto">
+        <button id="btn-ride-cam" title="First-Person Marble Cam" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 border-2 border-indigo-300">
+          <span class="text-lg sm:text-xl">🎢</span>
+          <span id="ride-cam-label" class="hidden md:inline">Marble Cam</span>
+        </button>
+
+        <button id="btn-speed" title="Marble Speed" class="btn-tactile h-11 sm:h-12 px-2 sm:px-3 rounded-2xl bg-white/95 backdrop-blur-md text-slate-800 font-extrabold text-xs sm:text-sm flex items-center gap-1 border-2 border-sky-200">
+          <span id="speed-icon" class="text-base sm:text-lg">🐢</span>
+          <span id="speed-label">1×</span>
+        </button>
+
+        <button id="btn-sound" title="Toggle Sound" class="btn-tactile h-11 w-11 sm:h-12 sm:w-12 rounded-2xl bg-white/95 backdrop-blur-md text-slate-800 font-bold text-lg sm:text-xl flex items-center justify-center border-2 border-slate-200">
+          🔊
+        </button>
+      </div>
+    </div>
+
+    <!-- Subtle Contextual Guidance Toast -->
+    <div id="toast-banner" class="mx-auto mt-1.5 max-w-md bg-slate-900/85 text-white text-center text-xs sm:text-sm font-semibold px-3.5 py-1 rounded-full shadow-lg backdrop-blur-md transition-opacity duration-300 opacity-0 pointer-events-none">
+      Tap a track piece below to snap it onto the glowing green ring!
+    </div>
+  </header>
+
+  <!-- FIRST-PERSON MARBLE CAM STEERING PADS (Visible only in Ride Mode, safely above bottom bars) -->
+  <div id="ride-controls" class="hidden fixed inset-x-0 bottom-56 sm:bottom-60 z-20 px-4 sm:px-8 flex items-center justify-between pointer-events-none">
+    <button id="steer-left" class="btn-tactile pointer-events-auto w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-white/85 active:bg-amber-300 backdrop-blur-md border-4 border-sky-400 flex flex-col items-center justify-center shadow-2xl">
+      <span class="text-3xl sm:text-4xl">⬅️</span>
+      <span class="text-xs sm:text-sm font-black text-slate-800 uppercase">Left</span>
+    </button>
+
+    <div class="bg-slate-900/75 text-white px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold tracking-wide backdrop-blur-sm border border-white/20">
+      Steer Marble Side-to-Side!
+    </div>
+
+    <button id="steer-right" class="btn-tactile pointer-events-auto w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-white/85 active:bg-amber-300 backdrop-blur-md border-4 border-sky-400 flex flex-col items-center justify-center shadow-2xl">
+      <span class="text-3xl sm:text-4xl">➡️</span>
+      <span class="text-xs sm:text-sm font-black text-slate-800 uppercase">Right</span>
+    </button>
+  </div>
+
+  <!-- COMPACT LIVE RUN BAR + ON-DEMAND REWIND SCRUBBER TOGGLE -->
+  <section id="timeline-panel" class="hidden fixed bottom-0 left-0 right-0 z-30 px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-3 pointer-events-none">
+    <div class="max-w-4xl mx-auto bg-white/95 backdrop-blur-md rounded-3xl p-2 sm:p-2.5 shadow-2xl border-2 border-sky-200 pointer-events-auto animate-pop flex flex-col gap-1.5">
+      <!-- Expandable Rewind Slider Drawer (Toggled via Rewind Button) -->
+      <div id="scrubber-drawer" class="hidden flex flex-col gap-1 pb-1 border-b border-slate-100">
+        <div class="flex items-center justify-between gap-2 px-1">
+          <span id="scrubber-mode-badge" class="text-xs sm:text-sm font-black text-sky-700 bg-sky-100 px-3 py-0.5 rounded-full">
+            ⏪ Drag Slider to Rewind &amp; Scrub
+          </span>
+          <span id="scrubber-time-label" class="text-xs sm:text-sm font-extrabold text-slate-600 tabular-nums">
+            0.0s / 0.0s
+          </span>
+        </div>
+        <div class="flex items-center px-2">
+          <input id="timeline-slider" type="range" min="0" max="0" value="0" step="1" class="timeline-scrubber" />
+        </div>
+      </div>
+
+      <!-- Compact Control Pills: Play/Pause, Add +1 Marble, Toggle Rewind Slider, Edit Track -->
+      <div class="flex items-center justify-between gap-1.5 sm:gap-2">
+        <div class="flex items-center gap-1.5">
+          <button id="btn-play-pause" title="Pause / Resume" class="btn-tactile h-11 w-11 sm:h-12 sm:w-12 shrink-0 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-black text-lg sm:text-xl flex items-center justify-center border-2 border-sky-200">
+            ⏸️
+          </button>
+
+          <button id="btn-add-more-marble" title="Add Another Marble" class="btn-tactile h-11 sm:h-12 px-3 sm:px-3.5 shrink-0 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold text-xs sm:text-sm flex items-center gap-1 border-2 border-emerald-200">
+            <span>➕</span>
+            <span>Marble</span>
+          </button>
+
+          <button id="btn-toggle-scrubber" title="Toggle Rewind Slider" class="btn-tactile h-11 sm:h-12 px-3 sm:px-3.5 shrink-0 rounded-2xl bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-extrabold text-xs sm:text-sm flex items-center gap-1 border-2 border-indigo-300">
+            <span>⏪</span>
+            <span id="toggle-scrubber-label">Rewind</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <button id="btn-replay" title="Replay From Start" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3.5 shrink-0 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs sm:text-sm flex items-center gap-1 border-2 border-amber-200">
+            <span>🔄</span>
+            <span class="hidden sm:inline">Replay</span>
+          </button>
+
+          <button id="btn-clear-marbles" title="Back to Track Builder" class="btn-tactile h-11 sm:h-12 px-3 sm:px-4 shrink-0 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs sm:text-sm flex items-center gap-1 border-2 border-slate-300">
+            <span>🧱</span>
+            <span>Edit Track</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FLOATING SMART MERGE / CRASH SOLUTION POPUP -->
+  <div id="merge-fix-popup" class="hidden fixed inset-x-0 bottom-24 sm:bottom-28 z-40 px-3 pointer-events-none">
+    <div class="max-w-lg mx-auto bg-amber-50/98 backdrop-blur-md rounded-3xl p-3.5 sm:p-4 shadow-2xl border-4 border-amber-400 pointer-events-auto flex flex-col gap-2.5">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">⚠️</span>
+          <div>
+            <h3 class="text-sm sm:text-base font-black text-slate-900 leading-tight">Track Overlap Detected!</h3>
+            <p id="merge-fix-desc" class="text-xs font-semibold text-slate-600 mt-0.5">
+              That piece runs into another track. Tap a smart merge fix below:
+            </p>
+          </div>
+        </div>
+        <button id="btn-dismiss-merge-fix" class="w-8 h-8 rounded-xl bg-amber-200/80 hover:bg-amber-300 text-slate-800 font-black text-sm flex items-center justify-center shrink-0">
+          ✕
+        </button>
+      </div>
+      <div id="merge-fix-options" class="flex flex-wrap items-center gap-2"></div>
+    </div>
+  </div>
+
+  <!-- PRESETS LIBRARY MODAL -->
+  <div id="presets-modal" class="hidden fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border-4 border-sky-200 max-h-[88vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b-2 border-slate-100">
+        <div>
+          <h2 class="text-2xl sm:text-3xl font-black text-slate-800">🧱 Starter Builds Library</h2>
+          <p class="text-slate-500 text-sm font-semibold">Pick a pre-built marble run, then snap your own pieces onto the end!</p>
+        </div>
+        <button id="btn-close-presets" class="btn-tactile w-12 h-12 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xl flex items-center justify-center">
+          ✕
+        </button>
+      </div>
+
+      <div id="presets-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 py-4 overflow-y-auto">
+        <!-- Populated dynamically by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ADAPTIVE BUILDER DOCK: Left Sidebar when Vertical (Portrait), Bottom Bar when Wide (Landscape) -->
+  <footer id="builder-dock">
+    <div id="builder-dock-inner" class="bg-white/95 backdrop-blur-md rounded-2xl sm:rounded-3xl shadow-2xl border-2 border-slate-200 pointer-events-auto flex gap-1.5 sm:gap-2">
+      <!-- Scrollable / Wrapping Piece Buttons (Populated by JS) -->
+      <div id="piece-palette" class="no-scrollbar flex gap-1.5 py-0.5"></div>
+
+      <!-- Compact Snap + Auto-Complete Loop + Undo / Clear Actions -->
+      <div id="builder-actions" class="flex items-center gap-1.5">
+        <button id="btn-snap-piece" title="Snap Selected Piece" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3.5 rounded-xl sm:rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-1 border-2 border-emerald-200 whitespace-nowrap">
+          <span>➕</span>
+          <span>Snap</span>
+        </button>
+
+        <button id="btn-complete-track" title="Auto-Complete Track & Close Endless Loop" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3 rounded-xl sm:rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-1 border-2 border-indigo-200 whitespace-nowrap">
+          <span>🛸</span>
+          <span class="hidden sm:inline">Loop</span>
+        </button>
+
+        <button id="btn-undo-piece" title="Undo Last Piece" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3 rounded-xl sm:rounded-2xl bg-sky-100 hover:bg-sky-200 text-sky-900 font-black text-lg flex items-center justify-center border-2 border-sky-200">
+          ↩️
+        </button>
+
+        <button id="btn-clear-track" title="Clear to Starter Tower" class="btn-tactile h-11 sm:h-12 px-2.5 sm:px-3 rounded-xl sm:rounded-2xl bg-rose-100 hover:bg-rose-200 text-rose-800 font-black text-lg flex items-center justify-center border-2 border-rose-200">
+          🗑️
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Main Game Application Script -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      if (typeof THREE === 'undefined') {
+        const toast = document.getElementById('toast-banner');
+        if (toast) {
+          toast.textContent = '3D Graphics Engine failed to load. Please check connection and refresh.';
+          toast.style.opacity = '1';
+        }
+        return;
+      }
+
+      /**
+       * ============================================================================
+       * 1. PROCEDURAL WEB AUDIO ENGINE (Tactile Plastic Clicks, Rolling, Chimes)
+       * ============================================================================
+       */
+      class SoundEngine {
+        constructor() {
+          this.ctx = null;
+          this.muted = false;
+          this.rollOsc = null;
+          this.rollGain = null;
+          this.rollFilter = null;
+          this.initialized = false;
+        }
+
+        init() {
+          if (this.initialized) return;
+          try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioCtx();
+
+            // Continuous rolling hum oscillator + bandpass filter
+            this.rollOsc = this.ctx.createOscillator();
+            this.rollOsc.type = 'triangle';
+            this.rollOsc.frequency.value = 65;
+
+            this.rollFilter = this.ctx.createBiquadFilter();
+            this.rollFilter.type = 'bandpass';
+            this.rollFilter.frequency.value = 180;
+            this.rollFilter.Q.value = 2.5;
+
+            this.rollGain = this.ctx.createGain();
+            this.rollGain.gain.value = 0.0;
+
+            this.rollOsc.connect(this.rollFilter);
+            this.rollFilter.connect(this.rollGain);
+            this.rollGain.connect(this.ctx.destination);
+            this.rollOsc.start();
+
+            this.initialized = true;
+          } catch (e) {
+            console.warn('Web Audio unavailable:', e);
+          }
+        }
+
+        unlock() {
+          if (!this.initialized) this.init();
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+          }
+        }
+
+        setMuted(mute) {
+          this.muted = mute;
+          if (this.rollGain && this.ctx) {
+            this.rollGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+          }
+        }
+
+        playSnapClick() {
+          if (this.muted) return;
+          this.unlock();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(340, now);
+          osc.frequency.exponentialRampToValueAtTime(720, now + 0.055);
+          osc.frequency.exponentialRampToValueAtTime(260, now + 0.11);
+
+          gain.gain.setValueAtTime(0.28, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.13);
+        }
+
+        playPopDelete() {
+          if (this.muted) return;
+          this.unlock();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(420, now);
+          osc.frequency.exponentialRampToValueAtTime(160, now + 0.12);
+
+          gain.gain.setValueAtTime(0.22, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.14);
+        }
+
+        playChime(noteIndex = 0) {
+          if (this.muted) return;
+          this.unlock();
+          if (!this.ctx) return;
+
+          const scale = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+          const freq = scale[noteIndex % scale.length];
+          const now = this.ctx.currentTime;
+
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+
+          gain.gain.setValueAtTime(0.24, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.56);
+        }
+
+        playMusicNote(freq, duration = 0.72, instrument = 'musicbox') {
+          if (this.muted) return;
+          this.unlock();
+          if (!this.ctx || !freq) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const overtone = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = instrument === 'symphony' ? 'triangle' : 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+
+          overtone.type = 'sine';
+          overtone.frequency.setValueAtTime(freq * 2, now);
+
+          const overtoneGain = this.ctx.createGain();
+          overtoneGain.gain.setValueAtTime(instrument === 'symphony' ? 0.08 : 0.04, now);
+          overtoneGain.gain.exponentialRampToValueAtTime(0.0005, now + duration * 0.6);
+
+          gain.gain.setValueAtTime(0.22, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+          osc.connect(gain);
+          overtone.connect(overtoneGain);
+          overtoneGain.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          osc.start(now);
+          overtone.start(now);
+          osc.stop(now + duration + 0.02);
+          overtone.stop(now + duration + 0.02);
+        }
+
+        playBellRing() {
+          if (this.muted) return;
+          this.unlock();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          [880, 1318.5, 1760].forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(idx === 0 ? 0.22 : 0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.85);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.88);
+          });
+        }
+
+        playFinishFanfare() {
+          if (this.muted) return;
+          this.unlock();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+            gain.gain.setValueAtTime(0.18, now + idx * 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.35);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + idx * 0.08);
+            osc.stop(now + idx * 0.08 + 0.38);
+          });
+        }
+
+        playHyperWarp() {
+          if (this.muted) return;
+          this.unlock();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(220, now);
+          osc.frequency.exponentialRampToValueAtTime(1180, now + 0.36);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.4);
+        }
+
+        playTowerLiftSound() {
+          if (this.muted) return;
+          this.unlock();
+          if (!this.ctx) return;
+
+          const now = this.ctx.currentTime;
+          [330, 440, 554.37, 659.25].forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.045);
+            gain.gain.setValueAtTime(0.14, now + idx * 0.045);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.045 + 0.22);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + idx * 0.045);
+            osc.stop(now + idx * 0.045 + 0.24);
+          });
+        }
+
+        updateRollSound(maxSpeed, activeCount) {
+          if (!this.initialized || !this.rollGain || !this.ctx) return;
+          if (this.muted || activeCount === 0 || maxSpeed < 0.05) {
+            this.rollGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.06);
+            return;
+          }
+          const norm = Math.min(maxSpeed / 12, 1);
+          this.rollOsc.frequency.setTargetAtTime(55 + norm * 85, this.ctx.currentTime, 0.08);
+          this.rollFilter.frequency.setTargetAtTime(150 + norm * 360, this.ctx.currentTime, 0.08);
+          this.rollGain.gain.setTargetAtTime(0.03 + norm * 0.07, this.ctx.currentTime, 0.08);
+        }
+      }
+
+      const sound = new SoundEngine();
+
+      /**
+       * ============================================================================
+       * 2. TRACK PIECE DEFINITIONS & SPLINE GEOMETRY
+       * ============================================================================
+       */
+      const TRACK_DEFS = {
+        starter: {
+          id: 'starter',
+          name: 'Drop Funnel',
+          icon: '🥣',
+          color: 0xf43f5e,
+          accent: 0xfef08a,
+          length: 4.2,
+          exitPos: new THREE.Vector3(0, -1.6, 3.6),
+          exitYaw: 0,
+          special: 'funnel',
+          getLocalPoint(u, lane = 0) {
+            if (u < 0.45) {
+              const t = u / 0.45;
+              const angle = t * Math.PI * 2.2;
+              const radius = 1.65 * (1 - t * 0.65);
+              return new THREE.Vector3(
+                Math.sin(angle) * radius,
+                0.85 * (1 - t) - 0.15,
+                Math.cos(angle) * radius * 0.7 + t * 1.1
+              );
+            } else {
+              const t = (u - 0.45) / 0.55;
+              return new THREE.Vector3(
+                lane * 0.55,
+                -0.15 - 1.45 * t,
+                1.1 + 2.5 * t
+              );
+            }
+          }
+        },
+        ramp: {
+          id: 'ramp',
+          name: 'Straight Chute',
+          icon: '🛝',
+          color: 0x0ea5e9,
+          accent: 0xbae6fd,
+          length: 4.5,
+          exitPos: new THREE.Vector3(0, -1.5, 4.2),
+          exitYaw: 0,
+          special: 'straight',
+          getLocalPoint(u, lane = 0) {
+            return new THREE.Vector3(lane * 0.62, -1.5 * u, 4.2 * u);
+          }
+        },
+        wave: {
+          id: 'wave',
+          name: 'Wave Dip',
+          icon: '🎢',
+          color: 0xf97316,
+          accent: 0xfed7aa,
+          length: 4.8,
+          exitPos: new THREE.Vector3(0, -1.5, 4.4),
+          exitYaw: 0,
+          special: 'wave',
+          getLocalPoint(u, lane = 0) {
+            const waveY = Math.sin(u * Math.PI * 2) * 0.34;
+            return new THREE.Vector3(lane * 0.6, -1.5 * u + waveY, 4.4 * u);
+          }
+        },
+        skyTube: {
+          id: 'skyTube',
+          name: 'Clear Sky Tube',
+          icon: '🫧',
+          color: 0x38bdf8,
+          accent: 0xe0f2fe,
+          length: 4.5,
+          exitPos: new THREE.Vector3(0, -1.4, 4.2),
+          exitYaw: 0,
+          special: 'skyTube',
+          getLocalPoint(u, lane = 0) {
+            return new THREE.Vector3(lane * 0.52, -1.4 * u, 4.2 * u);
+          }
+        },
+        turnLeft: {
+          id: 'turnLeft',
+          name: 'Turn Left',
+          icon: '↰',
+          color: 0xfacc15,
+          accent: 0xfef9c3,
+          length: 4.7,
+          exitPos: new THREE.Vector3(3.2, -1.35, 3.2),
+          exitYaw: Math.PI / 2,
+          special: 'turn',
+          getLocalPoint(u, lane = 0) {
+            const theta = u * (Math.PI / 2);
+            const r = 3.2 - lane * 0.55;
+            return new THREE.Vector3(
+              3.2 - Math.cos(theta) * r,
+              -1.35 * u,
+              Math.sin(theta) * r
+            );
+          }
+        },
+        turnRight: {
+          id: 'turnRight',
+          name: 'Turn Right',
+          icon: '↱',
+          color: 0xf97316,
+          accent: 0xffedd5,
+          length: 4.7,
+          exitPos: new THREE.Vector3(-3.2, -1.35, 3.2),
+          exitYaw: -Math.PI / 2,
+          special: 'turn',
+          getLocalPoint(u, lane = 0) {
+            const theta = u * (Math.PI / 2);
+            const r = 3.2 + lane * 0.55;
+            return new THREE.Vector3(
+              -3.2 + Math.cos(theta) * r,
+              -1.35 * u,
+              Math.sin(theta) * r
+            );
+          }
+        },
+        uTurn: {
+          id: 'uTurn',
+          name: 'U-Turn Hairpin',
+          icon: '🔄',
+          color: 0xec4899,
+          accent: 0xfce7f3,
+          length: 6.2,
+          exitPos: new THREE.Vector3(4.6, -1.7, 0.0),
+          exitYaw: Math.PI,
+          special: 'turn',
+          getLocalPoint(u, lane = 0) {
+            const theta = u * Math.PI;
+            const r = 2.3 - lane * 0.45;
+            return new THREE.Vector3(
+              2.3 - Math.cos(theta) * r,
+              -1.7 * u,
+              Math.sin(theta) * r
+            );
+          }
+        },
+        splitter: {
+          id: 'splitter',
+          name: 'Y-Splitter',
+          icon: '🔀',
+          color: 0x14b8a6,
+          accent: 0x99f6e4,
+          length: 5.0,
+          isSplitter: true,
+          exitPos: new THREE.Vector3(2.4, -1.45, 3.8),
+          exitYaw: Math.PI / 4,
+          exits: [
+            { pos: new THREE.Vector3(2.4, -1.45, 3.8), yaw: Math.PI / 4 },
+            { pos: new THREE.Vector3(-2.4, -1.45, 3.8), yaw: -Math.PI / 4 }
+          ],
+          special: 'splitter',
+          getLocalPoint(u, lane = 0, branch = 0) {
+            const dir = branch === 1 ? -1 : 1;
+            const xCurve = dir * 2.4 * (u * u * (3 - 2 * u));
+            return new THREE.Vector3(
+              xCurve + lane * 0.35,
+              -1.45 * u,
+              3.8 * u
+            );
+          }
+        },
+        bellGate: {
+          id: 'bellGate',
+          name: 'Golden Bell Gate',
+          icon: '🔔',
+          color: 0xd97706,
+          accent: 0xfef08a,
+          length: 4.5,
+          exitPos: new THREE.Vector3(0, -1.45, 4.2),
+          exitYaw: 0,
+          special: 'bellGate',
+          getLocalPoint(u, lane = 0) {
+            return new THREE.Vector3(lane * 0.58, -1.45 * u, 4.2 * u);
+          }
+        },
+        glowTrack: {
+          id: 'glowTrack',
+          name: 'Light-Up Track',
+          icon: '✨',
+          color: 0x312e81,
+          accent: 0x38bdf8,
+          length: 4.6,
+          exitPos: new THREE.Vector3(0, -1.45, 4.2),
+          exitYaw: 0,
+          special: 'glowTrack',
+          getLocalPoint(u, lane = 0) {
+            return new THREE.Vector3(lane * 0.58, -1.45 * u, 4.2 * u);
+          }
+        },
+        spinner: {
+          id: 'spinner',
+          name: 'Paddle Wheel',
+          icon: '🎡',
+          color: 0x8b5cf6,
+          accent: 0xddd6fe,
+          length: 4.5,
+          exitPos: new THREE.Vector3(0, -1.5, 4.2),
+          exitYaw: 0,
+          special: 'spinner',
+          getLocalPoint(u, lane = 0) {
+            return new THREE.Vector3(lane * 0.55, -1.5 * u, 4.2 * u);
+          }
+        },
+        chime: {
+          id: 'chime',
+          name: 'Chime Steps',
+          icon: '🎹',
+          color: 0xa855f7,
+          accent: 0xf3e8ff,
+          length: 4.8,
+          exitPos: new THREE.Vector3(0, -1.75, 4.3),
+          exitYaw: 0,
+          special: 'chime',
+          getLocalPoint(u, lane = 0) {
+            const stepBounce = Math.abs(Math.sin(u * Math.PI * 5)) * 0.14;
+            return new THREE.Vector3(lane * 0.58, -1.75 * u + stepBounce, 4.3 * u);
+          }
+        },
+        vortex: {
+          id: 'vortex',
+          name: 'Spiral Bowl',
+          icon: '🌀',
+          color: 0x10b981,
+          accent: 0xa7f3d0,
+          length: 6.4,
+          exitPos: new THREE.Vector3(0, -2.15, 3.6),
+          exitYaw: 0,
+          special: 'vortex',
+          getLocalPoint(u, lane = 0) {
+            const centerZ = 1.8;
+            if (u < 0.15) {
+              const t = u / 0.15;
+              return new THREE.Vector3(
+                lane * 0.45,
+                -0.35 * t,
+                t * 0.65
+              );
+            } else if (u < 0.85) {
+              const t = (u - 0.15) / 0.70;
+              const angle = t * Math.PI * 2;
+              const radius = (1.55 - t * 0.42) + lane * 0.24;
+              return new THREE.Vector3(
+                Math.sin(angle) * radius,
+                -0.35 - 1.35 * t - (1 - radius / 1.7) * 0.22,
+                centerZ - Math.cos(angle) * radius * 0.88
+              );
+            } else {
+              const t = (u - 0.85) / 0.15;
+              return new THREE.Vector3(
+                lane * 0.45,
+                -1.70 - 0.45 * t,
+                2.55 + 1.05 * t
+              );
+            }
+          }
+        },
+        boost: {
+          id: 'boost',
+          name: 'Turbo Boost',
+          icon: '⚡',
+          color: 0xef4444,
+          accent: 0xfef08a,
+          length: 4.5,
+          exitPos: new THREE.Vector3(0, -0.8, 4.4),
+          exitYaw: 0,
+          special: 'boost',
+          getLocalPoint(u, lane = 0) {
+            return new THREE.Vector3(lane * 0.55, -0.8 * u, 4.4 * u);
+          }
+        },
+        hyperLoop: {
+          id: 'hyperLoop',
+          name: 'Hyper-Loop Return',
+          icon: '🛸',
+          color: 0x6366f1,
+          accent: 0x22d3ee,
+          length: 4.2,
+          exitPos: null,
+          exitYaw: 0,
+          special: 'hyperLoop',
+          getLocalPoint(u, lane = 0) {
+            return new THREE.Vector3(lane * 0.5, 0.35 * Math.sin(u * Math.PI), 3.6 * u);
+          }
+        },
+        finish: {
+          id: 'finish',
+          name: 'Catch Tray',
+          icon: '🏁',
+          color: 0xe11d48,
+          accent: 0xfacc15,
+          length: 4.0,
+          exitPos: null,
+          exitYaw: 0,
+          special: 'finish',
+          getLocalPoint(u, lane = 0) {
+            return new THREE.Vector3(lane * 0.65, -0.3 * u, 3.5 * u);
+          }
+        }
+      };
+
+      const DOCK_PIECES = [
+        'ramp', 'wave', 'skyTube', 'turnLeft', 'turnRight', 'uTurn',
+        'splitter', 'bellGate', 'glowTrack', 'spinner', 'chime', 'vortex', 'boost', 'hyperLoop', 'finish'
+      ];
+
+      /**
+       * ============================================================================
+       * 3. PRE-ASSEMBLED PRESET BUILDS LIBRARY
+       * ============================================================================
+       */
+      const PRESET_BUILDS = [
+        {
+          id: 'grand_helix',
+          name: 'Grand Helix Palace',
+          badge: 'Featured',
+          badgeColor: 'bg-emerald-600',
+          desc: 'Spiral vortex bowls, golden bell gate, light-up rails, paddle wheel & chime steps!',
+          startPos: new THREE.Vector3(-4.2, 17.5, -7.2),
+          startYaw: 0,
+          melody: null,
+          pieces: ['starter', 'bellGate', 'turnLeft', 'glowTrack', 'turnLeft', 'vortex', 'turnRight', 'spinner', 'chime', 'finish']
+        },
+        {
+          id: 'perpetual_hyper_loop',
+          name: 'Endless Hyper-Loop Engine',
+          badge: '🛸 Infinite Loop',
+          badgeColor: 'bg-indigo-600',
+          desc: 'Marbles race through spirals & chimes, then get hyper-beamed straight back to the top forever!',
+          startPos: new THREE.Vector3(-4.2, 17.5, -7.2),
+          startYaw: 0,
+          melody: null,
+          pieces: ['starter', 'glowTrack', 'turnLeft', 'vortex', 'turnLeft', 'bellGate', 'chime', 'hyperLoop']
+        },
+        {
+          id: 'rollercoaster_tube_canyon',
+          name: 'Rollercoaster Tube Canyon',
+          badge: 'New Track Styles',
+          badgeColor: 'bg-sky-600',
+          desc: 'Clear sky tubes, rollercoaster wave dips, U-turn hairpins & golden bell gates!',
+          startPos: new THREE.Vector3(-4.5, 19.5, -6.5),
+          startYaw: 0,
+          melody: null,
+          pieces: ['starter', 'skyTube', 'wave', 'uTurn', 'bellGate', 'skyTube', 'turnRight', 'vortex', 'boost', 'finish']
+        },
+        {
+          id: 'twin_splitter_race',
+          name: 'Twin-Route Splitter Race',
+          badge: '🔀 2 Paths',
+          badgeColor: 'bg-teal-600',
+          desc: 'A Y-Splitter divides marbles down two separate spirals, paddle wheels & chimes! Steer Left/Right in Marble Cam!',
+          startPos: new THREE.Vector3(0, 18.0, -7.5),
+          startYaw: 0,
+          melody: null,
+          branches: [
+            { parentIdx: -1, branch: 0, type: 'starter' },
+            { parentIdx: 0, branch: 0, type: 'splitter' },
+            { parentIdx: 1, branch: 0, type: 'glowTrack' },
+            { parentIdx: 2, branch: 0, type: 'vortex' },
+            { parentIdx: 3, branch: 0, type: 'bellGate' },
+            { parentIdx: 4, branch: 0, type: 'finish' },
+            { parentIdx: 1, branch: 1, type: 'skyTube' },
+            { parentIdx: 6, branch: 0, type: 'spinner' },
+            { parentIdx: 7, branch: 0, type: 'chime' },
+            { parentIdx: 8, branch: 0, type: 'finish' }
+          ]
+        },
+        {
+          id: 'triple_cascade_maze',
+          name: 'Triple Cascade Maze',
+          badge: '🔀 3 Paths',
+          badgeColor: 'bg-purple-600',
+          desc: 'Drop ×3 marbles and watch them take 3 different routes across wave hills, clear tubes & spirals!',
+          startPos: new THREE.Vector3(-1.5, 20.5, -8.0),
+          startYaw: 0,
+          melody: null,
+          branches: [
+            { parentIdx: -1, branch: 0, type: 'starter' },
+            { parentIdx: 0, branch: 0, type: 'splitter' },
+            { parentIdx: 1, branch: 0, type: 'turnLeft' },
+            { parentIdx: 2, branch: 0, type: 'vortex' },
+            { parentIdx: 3, branch: 0, type: 'finish' },
+            { parentIdx: 1, branch: 1, type: 'splitter' },
+            { parentIdx: 5, branch: 0, type: 'wave' },
+            { parentIdx: 6, branch: 0, type: 'chime' },
+            { parentIdx: 7, branch: 0, type: 'finish' },
+            { parentIdx: 5, branch: 1, type: 'turnRight' },
+            { parentIdx: 9, branch: 0, type: 'glowTrack' },
+            { parentIdx: 10, branch: 0, type: 'finish' }
+          ]
+        },
+        {
+          id: 'twinkle_lullaby',
+          name: 'Twinkle Star Lullaby',
+          badge: '🎵 Lullaby',
+          badgeColor: 'bg-indigo-600',
+          desc: 'Plays "Twinkle, Twinkle, Little Star" on glowing music-box rails as marbles roll!',
+          startPos: new THREE.Vector3(-4.5, 19.5, -6.5),
+          startYaw: 0,
+          melody: {
+            name: 'Twinkle Star Lullaby',
+            instrument: 'musicbox',
+            notes: [523.25, 523.25, 783.99, 783.99, 880.0, 880.0, 783.99, 698.46, 698.46, 659.25, 659.25, 587.33, 587.33, 523.25]
+          },
+          pieces: ['starter', 'glowTrack', 'turnLeft', 'chime', 'glowTrack', 'turnLeft', 'vortex', 'chime', 'glowTrack', 'turnRight', 'chime', 'finish']
+        },
+        {
+          id: 'ode_to_joy_symphony',
+          name: 'Ode to Joy Symphony',
+          badge: '🎼 Symphony',
+          badgeColor: 'bg-purple-600',
+          desc: 'Plays Beethoven’s "Ode to Joy" symphony note-by-note across rainbow chime bars!',
+          startPos: new THREE.Vector3(-5.0, 21.0, -6.5),
+          startYaw: 0,
+          melody: {
+            name: 'Ode to Joy Symphony',
+            instrument: 'symphony',
+            notes: [659.25, 659.25, 698.46, 783.99, 783.99, 698.46, 659.25, 587.33, 523.25, 523.25, 587.33, 659.25, 659.25, 587.33, 587.33]
+          },
+          pieces: ['starter', 'chime', 'turnLeft', 'glowTrack', 'chime', 'turnRight', 'vortex', 'glowTrack', 'chime', 'turnLeft', 'boost', 'chime', 'finish']
+        },
+        {
+          id: 'blank_starter',
+          name: 'High Starter Tower',
+          badge: 'Build Your Own',
+          badgeColor: 'bg-slate-600',
+          desc: 'A tall starter funnel ready for your own custom route—auto-lifts as you build!',
+          startPos: new THREE.Vector3(0, 15.0, -5.0),
+          startYaw: 0,
+          melody: null,
+          pieces: ['starter']
+        }
+      ];
+
+      /**
+       * ============================================================================
+       * 4. MARBLE VISUAL STYLES & SPEED SETTINGS
+       * ============================================================================
+       */
+      const MARBLE_STYLES = [
+        { name: 'Ruby', css: 'radial-gradient(circle at 30% 30%, #fff, #ef4444 45%, #7f1d1d)', primary: '#ef4444', secondary: '#fef08a' },
+        { name: 'Ocean', css: 'radial-gradient(circle at 30% 30%, #fff, #0ea5e9 45%, #1e3a8a)', primary: '#0ea5e9', secondary: '#a7f3d0' },
+        { name: 'Chrome', css: 'radial-gradient(circle at 30% 30%, #ffffff, #94a3b8 50%, #334155)', primary: '#cbd5e1', secondary: '#475569' },
+        { name: 'Rainbow', css: 'conic-gradient(#ef4444, #facc15, #22c55e, #3b82f6, #a855f7, #ef4444)', primary: '#f59e0b', secondary: '#8b5cf6' },
+        { name: 'Emerald', css: 'radial-gradient(circle at 30% 30%, #fff, #10b981 45%, #064e3b)', primary: '#10b981', secondary: '#fde047' }
+      ];
+
+      const SPEED_LEVELS = [
+        { mult: 0.45, icon: '🐌', label: '0.5×', name: 'Slow-Mo' },
+        { mult: 0.72, icon: '🐢', label: '1×', name: 'Normal' },
+        { mult: 1.15, icon: '🐇', label: '1.5×', name: 'Fast' }
+      ];
+
+      const WORLD_THEMES = [
+        {
+          id: 'daylight',
+          name: 'Daylight',
+          icon: '☀️',
+          bg: 0xdbeafe,
+          fog: 0xdbeafe,
+          bodyBg: '#dbeafe',
+          hemiSky: 0xffffff,
+          hemiGround: 0xcbd5e1,
+          dirColor: 0xfffbeb,
+          dirIntensity: 1.05,
+          matBase: 0xf8fafc,
+          matRim: 0x38bdf8,
+          studColor: 0xe2e8f0
+        },
+        {
+          id: 'cosmic',
+          name: 'Cosmic',
+          icon: '🌌',
+          bg: 0x0f172a,
+          fog: 0x0f172a,
+          bodyBg: '#0f172a',
+          hemiSky: 0x818cf8,
+          hemiGround: 0x1e1b4b,
+          dirColor: 0xe0e7ff,
+          dirIntensity: 0.95,
+          matBase: 0x1e293b,
+          matRim: 0x38bdf8,
+          studColor: 0x334155
+        },
+        {
+          id: 'sunset',
+          name: 'Sunset',
+          icon: '🌅',
+          bg: 0xffedd5,
+          fog: 0xffedd5,
+          bodyBg: '#ffedd5',
+          hemiSky: 0xfff7ed,
+          hemiGround: 0xfed7aa,
+          dirColor: 0xffedd5,
+          dirIntensity: 1.15,
+          matBase: 0xfffbeb,
+          matRim: 0xf97316,
+          studColor: 0xfde68a
+        },
+        {
+          id: 'forest',
+          name: 'Forest',
+          icon: '🌿',
+          bg: 0xdcfce7,
+          fog: 0xdcfce7,
+          bodyBg: '#dcfce7',
+          hemiSky: 0xf0fdf4,
+          hemiGround: 0xbbf7d0,
+          dirColor: 0xfefce8,
+          dirIntensity: 1.05,
+          matBase: 0xf0fdf4,
+          matRim: 0x10b981,
+          studColor: 0xbbf7d0
+        }
+      ];
+
+      /**
+       * ============================================================================
+       * 5. THREE.JS SCENE, ENVIRONMENT & LIGHTING
+       * ============================================================================
+       */
+      const container = document.getElementById('canvas-container');
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xdbeafe);
+      scene.fog = new THREE.FogExp2(0xdbeafe, 0.0085);
+
+      const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 340);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
+      if (container) container.appendChild(renderer.domElement);
+
+      // Lighting
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcbd5e1, 0.85);
+      hemiLight.position.set(0, 40, 0);
+      scene.add(hemiLight);
+
+      const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.05);
+      dirLight.position.set(18, 32, 22);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 2;
+      dirLight.shadow.camera.far = 90;
+      const d = 24;
+      dirLight.shadow.camera.left = -d;
+      dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d;
+      dirLight.shadow.camera.bottom = -d;
+      dirLight.shadow.bias = -0.0005;
+      scene.add(dirLight);
+
+      const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+      rimLight.position.set(-20, 15, -18);
+      scene.add(rimLight);
+
+      // Procedural Wood-Grain Tabletop Texture
+      function createWoodFloorTexture() {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#e7dcc8';
+        ctx.fillRect(0, 0, 512, 512);
+        for (let y = 0; y < 512; y += 64) {
+          ctx.fillStyle = (y / 64) % 2 === 0 ? 'rgba(214, 198, 172, 0.45)' : 'rgba(235, 224, 204, 0.45)';
+          ctx.fillRect(0, y, 512, 62);
+          ctx.fillStyle = 'rgba(168, 148, 118, 0.28)';
+          ctx.fillRect(0, y + 62, 512, 2);
+        }
+        ctx.strokeStyle = 'rgba(180, 158, 128, 0.14)';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 90; i++) {
+          ctx.beginPath();
+          const y0 = Math.random() * 512;
+          ctx.moveTo(0, y0);
+          ctx.bezierCurveTo(170, y0 + (Math.random() - 0.5) * 14, 340, y0 + (Math.random() - 0.5) * 14, 512, y0);
+          ctx.stroke();
+        }
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(8, 8);
+        return tex;
+      }
+
+      // Playroom Tabletop & Duplo Stud Baseplate
+      const floorGeo = new THREE.CylinderGeometry(48, 48, 1.2, 64);
+      const floorMat = new THREE.MeshStandardMaterial({
+        map: createWoodFloorTexture(),
+        roughness: 0.78,
+        metalness: 0.04
+      });
+      const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+      floorMesh.position.y = -0.6;
+      floorMesh.receiveShadow = true;
+      scene.add(floorMesh);
+
+      const matBaseGeo = new THREE.BoxGeometry(27, 0.36, 27);
+      const matBaseMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.45, metalness: 0.05 });
+      const matBase = new THREE.Mesh(matBaseGeo, matBaseMat);
+      matBase.position.y = 0.18;
+      matBase.receiveShadow = true;
+      scene.add(matBase);
+
+      const matRimGeo = new THREE.BoxGeometry(28.0, 0.42, 28.0);
+      const matRimMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.35 });
+      const matRim = new THREE.Mesh(matRimGeo, matRimMat);
+      matRim.position.y = 0.14;
+      matRim.receiveShadow = true;
+      scene.add(matRim);
+
+      // Instanced Duplo Studs across the play mat
+      const studCount = 14 * 14;
+      const studGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.18, 16);
+      const studMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.38 });
+      const studInst = new THREE.InstancedMesh(studGeo, studMat, studCount);
+      studInst.receiveShadow = true;
+      const dummy = new THREE.Object3D();
+      let sIdx = 0;
+      for (let ix = 0; ix < 14; ix++) {
+        for (let iz = 0; iz < 14; iz++) {
+          dummy.position.set(-11.7 + ix * 1.8, 0.42, -11.7 + iz * 1.8);
+          dummy.updateMatrix();
+          studInst.setMatrixAt(sIdx++, dummy.matrix);
+        }
+      }
+      scene.add(studInst);
+
+      // Decorative Playroom Toy Blocks around perimeter
+      [
+        { x: -12.2, z: -12.2, c: 0xf87171, s: 1.3 },
+        { x: 12.2, z: -12.0, c: 0xfbbf24, s: 1.5 },
+        { x: -12.0, z: 12.2, c: 0x60a5fa, s: 1.4 },
+        { x: 12.3, z: 12.1, c: 0x34d399, s: 1.25 }
+      ].forEach(b => {
+        const blk = new THREE.Mesh(
+          new THREE.BoxGeometry(b.s, b.s, b.s),
+          new THREE.MeshStandardMaterial({ color: b.c, roughness: 0.35 })
+        );
+        blk.position.set(b.x, 0.36 + b.s * 0.5, b.z);
+        blk.castShadow = true;
+        blk.receiveShadow = true;
+        scene.add(blk);
+      });
+
+      /**
+       * ============================================================================
+       * 6. CAMERA ORBIT / PINCH-ZOOM CONTROLLER (Touch + Mouse)
+       * ============================================================================
+       */
+      const camTarget = new THREE.Vector3(0, 6.2, 0);
+      let camRadius = 28;
+      let camTheta = 0.62;
+      let camPhi = 1.02;
+
+      function updateOrbitCamera() {
+        camPhi = Math.max(0.22, Math.min(Math.PI * 0.46, camPhi));
+        camRadius = Math.max(10, Math.min(95, camRadius));
+
+        const sinPhi = Math.sin(camPhi);
+        camera.position.set(
+          camTarget.x + camRadius * sinPhi * Math.sin(camTheta),
+          camTarget.y + camRadius * Math.cos(camPhi),
+          camTarget.z + camRadius * sinPhi * Math.cos(camTheta)
+        );
+        camera.lookAt(camTarget);
+      }
+      updateOrbitCamera();
+
+      /**
+       * ============================================================================
+       * 7. TRACK BUILDER & PROCEDURAL 3D TRACK MESHES
+       * ============================================================================
+       */
+      const trackGroup = new THREE.Group();
+      const ghostGroup = new THREE.Group();
+      const socketGroup = new THREE.Group();
+      const marbleGroup = new THREE.Group();
+      const propsGroup = new THREE.Group();
+      const confettiGroup = new THREE.Group();
+      scene.add(trackGroup, ghostGroup, socketGroup, marbleGroup, propsGroup, confettiGroup);
+
+      let trackNodes = [];
+      let selectedPieceType = 'ramp';
+      let targetedSocket = null;
+      let draggingPieceType = null;
+      let draggingExistingNodeIndex = -1;
+      let dragGhostBadge = null;
+      let bowlingPins = [];
+      let activeSpinners = [];
+      let activeGlowStrips = [];
+      let activeConfetti = [];
+      let currentPresetMelody = null;
+      let melodyNoteCursor = 0;
+      let splitterToggleCount = 0;
+      let socketIndicators = [];
+
+      function getAllOpenSockets() {
+        const sockets = [];
+        if (trackNodes.length === 0) {
+          sockets.push({
+            parentIndex: -1,
+            branch: 0,
+            pos: new THREE.Vector3(0, 14.5, -5.0),
+            yaw: 0,
+            key: '-1:0'
+          });
+          return sockets;
+        }
+
+        trackNodes.forEach((node, idx) => {
+          const def = TRACK_DEFS[node.type];
+          if (!def || def.special === 'finish' || def.special === 'hyperLoop') return;
+
+          if (def.isSplitter && def.exits) {
+            def.exits.forEach((ex, bIdx) => {
+              const hasChild = trackNodes.some(n => n.parentIndex === idx && (n.branch || 0) === bIdx);
+              if (!hasChild) {
+                const rotEx = ex.pos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), node.yaw);
+                sockets.push({
+                  parentIndex: idx,
+                  branch: bIdx,
+                  pos: node.pos.clone().add(rotEx),
+                  yaw: node.yaw + ex.yaw,
+                  key: `${idx}:${bIdx}`
+                });
+              }
+            });
+          } else if (def.exitPos) {
+            const hasChild = trackNodes.some(n => n.parentIndex === idx && (n.branch || 0) === 0);
+            if (!hasChild) {
+              const rotEx = def.exitPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), node.yaw);
+              sockets.push({
+                parentIndex: idx,
+                branch: 0,
+                pos: node.pos.clone().add(rotEx),
+                yaw: node.yaw + (def.exitYaw || 0),
+                key: `${idx}:0`
+              });
+            }
+          }
+        });
+
+        return sockets;
+      }
+
+      function getAllSpliceJoints() {
+        const joints = [];
+        trackNodes.forEach((node, idx) => {
+          if (idx === 0) return;
+          joints.push({
+            isSplice: true,
+            replaceNodeIndex: idx,
+            parentIndex: node.parentIndex,
+            branch: node.branch || 0,
+            pos: node.pos.clone(),
+            yaw: node.yaw,
+            key: `splice:${idx}`
+          });
+        });
+        return joints;
+      }
+
+      function getAllTargetSockets() {
+        return [...getAllOpenSockets(), ...getAllSpliceJoints()];
+      }
+
+      function getOpenSocket() {
+        const allTargets = getAllTargetSockets();
+        const openSockets = getAllOpenSockets();
+        if (allTargets.length === 0) {
+          targetedSocket = null;
+          return null;
+        }
+        if (targetedSocket) {
+          const match = allTargets.find(s => s.key === targetedSocket.key);
+          if (match) {
+            targetedSocket = match;
+            return match;
+          }
+        }
+        if (openSockets.length > 0) {
+          targetedSocket = openSockets[openSockets.length - 1];
+          return targetedSocket;
+        }
+        targetedSocket = allTargets[0];
+        return targetedSocket;
+      }
+
+      function worldToScreen(vec3) {
+        const v = vec3.clone().project(camera);
+        return {
+          x: (v.x * 0.5 + 0.5) * window.innerWidth,
+          y: (-v.y * 0.5 + 0.5) * window.innerHeight,
+          behind: v.z > 1
+        };
+      }
+
+      function findNearestSocketToScreen(clientX, clientY, maxDistPx = 140) {
+        const sockets = getAllTargetSockets();
+        let best = null;
+        let bestDist = maxDistPx;
+        sockets.forEach(s => {
+          const sc = worldToScreen(s.pos);
+          if (sc.behind) return;
+          const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+          if (d < bestDist) {
+            bestDist = d;
+            best = s;
+          }
+        });
+        return best;
+      }
+
+      function createTrackPieceMesh(pieceType, isGhost = false) {
+        const def = TRACK_DEFS[pieceType];
+        const root = new THREE.Group();
+
+        const plasticMat = isGhost
+          ? new THREE.MeshStandardMaterial({
+              color: 0x22c55e,
+              transparent: true,
+              opacity: 0.48,
+              roughness: 0.25,
+              emissive: 0x16a34a,
+              emissiveIntensity: 0.35
+            })
+          : new THREE.MeshPhysicalMaterial({
+              color: def.color,
+              roughness: 0.24,
+              metalness: 0.04,
+              clearcoat: 0.65,
+              clearcoatRoughness: 0.18
+            });
+
+        const accentMat = isGhost
+          ? plasticMat
+          : new THREE.MeshPhysicalMaterial({
+              color: def.accent,
+              roughness: 0.28,
+              clearcoat: 0.5
+            });
+
+        // Snap-fit coupler collar at the entry socket
+        const collar = new THREE.Mesh(new THREE.CylinderGeometry(1.06, 1.12, 0.36, 20), accentMat);
+        collar.position.set(0, -0.05, 0);
+        if (!isGhost) collar.castShadow = true;
+        root.add(collar);
+
+        // Build curved channel trough along spline samples
+        const branchesToDraw = def.isSplitter ? [0, 1] : [0];
+        branchesToDraw.forEach(branchIdx => {
+          const samples = 24;
+          const pts = [];
+          for (let i = 0; i <= samples; i++) {
+            pts.push(def.getLocalPoint(i / samples, 0, branchIdx));
+          }
+
+          for (let i = 0; i < samples; i++) {
+            const p0 = pts[i];
+            const p1 = pts[i + 1];
+            const mid = p0.clone().add(p1).multiplyScalar(0.5);
+            const segVec = p1.clone().sub(p0);
+            const segLen = segVec.length() + 0.05;
+
+            const segGroup = new THREE.Group();
+            segGroup.position.copy(mid);
+            segGroup.lookAt(p1);
+
+            const bedWidth = def.special === 'vortex' ? 1.85 : 1.52;
+            const bed = new THREE.Mesh(new THREE.BoxGeometry(bedWidth, 0.18, segLen), plasticMat);
+            bed.position.y = -0.34;
+            if (!isGhost) {
+              bed.castShadow = true;
+              bed.receiveShadow = true;
+            }
+            segGroup.add(bed);
+
+            // High-visibility safety rails
+            const wallH = (def.special === 'vortex' || def.special === 'funnel') ? 0.62 : 0.44;
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.18, wallH, segLen), accentMat);
+            leftWall.position.set(bedWidth * 0.5, -0.14, 0);
+            if (!isGhost) leftWall.castShadow = true;
+            segGroup.add(leftWall);
+
+            const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.18, wallH, segLen), accentMat);
+            rightWall.position.set(-bedWidth * 0.5, -0.14, 0);
+            if (!isGhost) rightWall.castShadow = true;
+            segGroup.add(rightWall);
+
+            root.add(segGroup);
+          }
+        });
+
+        // Special interactive visual ornaments per piece type
+        if (pieceType === 'starter') {
+          const bowlGeo = new THREE.CylinderGeometry(2.15, 0.85, 1.35, 32, 1, true);
+          const bowlMat = isGhost
+            ? plasticMat
+            : new THREE.MeshPhysicalMaterial({
+                color: 0xf43f5e,
+                roughness: 0.2,
+                clearcoat: 0.7,
+                side: THREE.DoubleSide
+              });
+          const bowl = new THREE.Mesh(bowlGeo, bowlMat);
+          bowl.position.set(0, 0.45, 0.2);
+          if (!isGhost) bowl.castShadow = true;
+          root.add(bowl);
+
+          const rimRing = new THREE.Mesh(new THREE.TorusGeometry(2.15, 0.14, 14, 32), accentMat);
+          rimRing.rotation.x = Math.PI / 2;
+          rimRing.position.set(0, 1.12, 0.2);
+          root.add(rimRing);
+        } else if (pieceType === 'vortex') {
+          const vortexBowlGeo = new THREE.CylinderGeometry(2.15, 1.05, 1.55, 36, 1, true);
+          const vortexBowlMat = isGhost
+            ? plasticMat
+            : new THREE.MeshPhysicalMaterial({
+                color: 0x10b981,
+                roughness: 0.16,
+                clearcoat: 0.8,
+                transparent: true,
+                opacity: 0.74,
+                side: THREE.DoubleSide
+              });
+          const vortexBowl = new THREE.Mesh(vortexBowlGeo, vortexBowlMat);
+          vortexBowl.position.set(0, -0.95, 1.8);
+          if (!isGhost) vortexBowl.castShadow = true;
+          root.add(vortexBowl);
+
+          const topLip = new THREE.Mesh(new THREE.TorusGeometry(2.16, 0.14, 14, 36), accentMat);
+          topLip.rotation.x = Math.PI / 2;
+          topLip.position.set(0, -0.18, 1.8);
+          root.add(topLip);
+
+          for (let r = 0; r < 8; r++) {
+            const ang = (r / 8) * Math.PI * 2;
+            const rib = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.35, 0.14), accentMat);
+            rib.position.set(Math.sin(ang) * 1.58, -0.95, 1.8 + Math.cos(ang) * 1.58);
+            rib.rotation.y = ang + 0.35;
+            rib.rotation.z = 0.24;
+            root.add(rib);
+          }
+
+          const spire = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.45, 20), accentMat);
+          spire.position.set(0, -1.0, 1.8);
+          root.add(spire);
+        } else if (pieceType === 'skyTube') {
+          const tubeMat = isGhost
+            ? plasticMat
+            : new THREE.MeshPhysicalMaterial({
+                color: 0xbae6fd,
+                roughness: 0.08,
+                transparent: true,
+                opacity: 0.34,
+                side: THREE.DoubleSide
+              });
+          for (let t = 0; t < 6; t++) {
+            const u = (t + 0.5) / 6;
+            const pt = def.getLocalPoint(u, 0);
+            const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.08, 10, 24), tubeMat);
+            hoop.position.copy(pt).add(new THREE.Vector3(0, 0.15, 0));
+            hoop.rotation.x = 0.32;
+            root.add(hoop);
+          }
+        } else if (pieceType === 'bellGate') {
+          [-0.95, 0.95].forEach(px => {
+            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.9, 12), accentMat);
+            post.position.set(px, 0.15, 2.1);
+            root.add(post);
+          });
+          const crossbar = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.2, 0.2), accentMat);
+          crossbar.position.set(0, 1.05, 2.1);
+          root.add(crossbar);
+
+          const bellMat = isGhost
+            ? plasticMat
+            : new THREE.MeshStandardMaterial({
+                color: 0xfacc15,
+                metalness: 0.7,
+                roughness: 0.2,
+                emissive: 0xf59e0b,
+                emissiveIntensity: 0.25
+              });
+          const bell = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.48, 18), bellMat);
+          bell.position.set(0, 0.72, 2.1);
+          root.add(bell);
+        } else if (pieceType === 'chime') {
+          const barColors = [0xef4444, 0xf97316, 0xfacc15, 0x22c55e, 0x0ea5e9, 0xa855f7];
+          for (let b = 0; b < 6; b++) {
+            const u = (b + 0.5) / 6;
+            const pt = def.getLocalPoint(u, 0);
+            const barMat = isGhost
+              ? plasticMat
+              : new THREE.MeshPhysicalMaterial({ color: barColors[b], roughness: 0.2, metalness: 0.25, clearcoat: 0.6 });
+            const bar = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.12, 0.34), barMat);
+            bar.position.set(pt.x, pt.y - 0.21, pt.z);
+            bar.rotation.x = 0.36;
+            root.add(bar);
+          }
+        } else if (pieceType === 'glowTrack') {
+          const glowMats = [];
+          for (let s = 0; s < 5; s++) {
+            const u = (s + 0.5) / 5;
+            const pt = def.getLocalPoint(u, 0);
+            const stripMat = isGhost
+              ? plasticMat
+              : new THREE.MeshStandardMaterial({
+                  color: 0x38bdf8,
+                  emissive: 0x38bdf8,
+                  emissiveIntensity: 0.35,
+                  roughness: 0.2
+                });
+            const arch = new THREE.Mesh(new THREE.TorusGeometry(0.86, 0.08, 10, 24, Math.PI), stripMat);
+            arch.position.set(pt.x, pt.y - 0.12, pt.z);
+            arch.rotation.x = 0.32;
+            root.add(arch);
+            if (!isGhost) glowMats.push(stripMat);
+          }
+          if (!isGhost) root.userData.glowMats = glowMats;
+        } else if (pieceType === 'spinner') {
+          [-0.95, 0.95].forEach(px => {
+            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.65, 12), accentMat);
+            post.position.set(px, -0.05, 2.1);
+            root.add(post);
+          });
+          const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.1, 12), accentMat);
+          axle.rotation.z = Math.PI / 2;
+          axle.position.set(0, 0.52, 2.1);
+          root.add(axle);
+
+          const wheelPivot = new THREE.Group();
+          wheelPivot.position.set(0, 0.52, 2.1);
+          const bladeColors = [0xf43f5e, 0xfacc15, 0x38bdf8, 0x10b981];
+          for (let b = 0; b < 4; b++) {
+            const bladeMat = isGhost
+              ? plasticMat
+              : new THREE.MeshPhysicalMaterial({ color: bladeColors[b], roughness: 0.25, clearcoat: 0.5 });
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.42, 0.08), bladeMat);
+            blade.rotation.x = (b * Math.PI) / 2;
+            wheelPivot.add(blade);
+          }
+          root.add(wheelPivot);
+          if (!isGhost) {
+            root.userData.spinnerWheel = wheelPivot;
+            root.userData.spinBoost = 0;
+          }
+        } else if (pieceType === 'boost') {
+          for (let a = 0; a < 4; a++) {
+            const u = (a + 0.5) / 4;
+            const pt = def.getLocalPoint(u, 0);
+            const chevron = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.32), accentMat);
+            chevron.position.set(pt.x, pt.y - 0.22, pt.z);
+            chevron.rotation.x = 0.18;
+            root.add(chevron);
+          }
+        } else if (pieceType === 'finish') {
+          const endWall = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.95, 0.24), plasticMat);
+          endWall.position.set(0, 0.18, 3.65);
+          root.add(endWall);
+
+          [-1.2, 1.2].forEach(px => {
+            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 2.3, 14), accentMat);
+            post.position.set(px, 1.05, 3.0);
+            root.add(post);
+          });
+          const banner = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.48, 0.22), accentMat);
+          banner.position.set(0, 2.15, 3.0);
+          root.add(banner);
+        } else if (pieceType === 'hyperLoop') {
+          const portalMat = new THREE.MeshStandardMaterial({
+            color: isGhost ? 0x22c55e : 0x22d3ee,
+            emissive: isGhost ? 0x22c55e : 0x06b6d4,
+            emissiveIntensity: 0.75,
+            roughness: 0.15,
+            transparent: true,
+            opacity: isGhost ? 0.55 : 0.9
+          });
+          for (let r = 0; r < 3; r++) {
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(1.15 - r * 0.14, 0.11, 14, 32), portalMat);
+            ring.position.set(0, 0.95 + r * 0.25, 2.4 + r * 0.45);
+            root.add(ring);
+          }
+          const coreDisc = new THREE.Mesh(
+            new THREE.CircleGeometry(0.95, 28),
+            new THREE.MeshBasicMaterial({
+              color: 0xa5f3fc,
+              transparent: true,
+              opacity: isGhost ? 0.3 : 0.55,
+              side: THREE.DoubleSide
+            })
+          );
+          coreDisc.position.set(0, 1.15, 3.1);
+          root.add(coreDisc);
+
+          const beamColumn = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.35, 0.85, 14.0, 20, 1, true),
+            new THREE.MeshBasicMaterial({
+              color: 0x38bdf8,
+              transparent: true,
+              opacity: isGhost ? 0.12 : 0.2,
+              side: THREE.DoubleSide
+            })
+          );
+          beamColumn.position.set(0, 7.5, 3.1);
+          root.add(beamColumn);
+        }
+
+        // Modular support columns
+        if (!isGhost) {
+          const pillarMat = new THREE.MeshPhysicalMaterial({ color: 0xf1f5f9, roughness: 0.4, clearcoat: 0.25 });
+          const ringMat = new THREE.MeshPhysicalMaterial({ color: def.color, roughness: 0.3, clearcoat: 0.5 });
+          const footMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.45 });
+
+          const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.42, 1, 16), pillarMat);
+          pillar.name = 'supportPillar';
+          pillar.castShadow = true;
+          pillar.receiveShadow = true;
+          root.add(pillar);
+
+          const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.78, 0.34, 20), footMat);
+          foot.name = 'supportFoot';
+          foot.receiveShadow = true;
+          root.add(foot);
+
+          for (let r = 0; r < 6; r++) {
+            const collarRing = new THREE.Mesh(new THREE.TorusGeometry(0.41, 0.06, 8, 18), ringMat);
+            collarRing.rotation.x = Math.PI / 2;
+            collarRing.name = `collarRing_${r}`;
+            root.add(collarRing);
+          }
+        }
+
+        return root;
+      }
+
+      function rebuildVisualTrackAndPins() {
+        while (trackGroup.children.length) trackGroup.remove(trackGroup.children[0]);
+        while (propsGroup.children.length) propsGroup.remove(propsGroup.children[0]);
+        bowlingPins = [];
+        activeSpinners = [];
+        activeGlowStrips = [];
+
+        trackNodes.forEach((node, idx) => {
+          const mesh = createTrackPieceMesh(node.type, false);
+          mesh.position.copy(node.pos);
+          mesh.rotation.y = node.yaw;
+          mesh.userData.nodeIndex = idx;
+
+          if (mesh.userData.spinnerWheel) {
+            activeSpinners.push(mesh);
+          }
+          if (mesh.userData.glowMats) {
+            activeGlowStrips.push(mesh);
+          }
+
+          const pillar = mesh.getObjectByName('supportPillar');
+          const foot = mesh.getObjectByName('supportFoot');
+          const height = Math.max(0.5, node.pos.y - 0.35);
+          if (pillar) {
+            pillar.scale.set(1, height, 1);
+            pillar.position.set(0, -height / 2 - 0.32, 0);
+          }
+          if (foot) {
+            foot.position.set(0, -node.pos.y + 0.52, 0);
+          }
+          for (let r = 0; r < 6; r++) {
+            const ring = mesh.getObjectByName(`collarRing_${r}`);
+            if (ring) {
+              const ry = -1.8 - r * 3.0;
+              if (node.pos.y + ry > 0.7) {
+                ring.visible = true;
+                ring.position.set(0, ry, 0);
+              } else {
+                ring.visible = false;
+              }
+            }
+          }
+
+          trackGroup.add(mesh);
+
+          if (node.type === 'ramp' && idx > 0) {
+            [-0.38, 0.38].forEach(lx => {
+              const localPt = TRACK_DEFS.ramp.getLocalPoint(0.55, lx);
+              const worldPt = localPt.applyAxisAngle(new THREE.Vector3(0, 1, 0), node.yaw).add(node.pos);
+
+              const pinGroup = new THREE.Group();
+              const body = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.08, 0.13, 0.46, 12),
+                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 })
+              );
+              body.position.y = 0.23;
+              body.castShadow = true;
+
+              const stripe = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.095, 0.095, 0.08, 12),
+                new THREE.MeshStandardMaterial({ color: 0xef4444 })
+              );
+              stripe.position.y = 0.34;
+
+              pinGroup.add(body, stripe);
+              pinGroup.position.copy(worldPt).add(new THREE.Vector3(0, -0.22, 0));
+              propsGroup.add(pinGroup);
+
+              bowlingPins.push({
+                mesh: pinGroup,
+                basePos: pinGroup.position.clone(),
+                knocked: false,
+                vel: new THREE.Vector3(),
+                rotVel: new THREE.Vector3()
+              });
+            });
+          }
+        });
+
+        updateGhostAndSocket();
+      }
+
+      function updateGhostAndSocket() {
+        while (ghostGroup.children.length) ghostGroup.remove(ghostGroup.children[0]);
+        while (socketGroup.children.length) socketGroup.remove(socketGroup.children[0]);
+        socketIndicators = [];
+
+        if (simState !== 'build') return;
+
+        const openSockets = getAllOpenSockets();
+        const spliceJoints = getAllSpliceJoints();
+        const activeSocket = getOpenSocket();
+        if (!activeSocket) return;
+
+        openSockets.forEach(sock => {
+          const isSelected = sock.key === activeSocket.key;
+          const ringGeo = new THREE.TorusGeometry(isSelected ? 1.18 : 0.94, isSelected ? 0.14 : 0.11, 14, 32);
+          const ringMat = new THREE.MeshBasicMaterial({
+            color: isSelected ? 0x22c55e : 0x0ea5e9,
+            transparent: true,
+            opacity: isSelected ? 0.92 : 0.65
+          });
+          const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+          ringMesh.position.copy(sock.pos);
+          ringMesh.rotation.x = Math.PI / 2;
+          ringMesh.userData.socketData = sock;
+          socketGroup.add(ringMesh);
+          socketIndicators.push(ringMesh);
+        });
+
+        spliceJoints.forEach(joint => {
+          const isSelected = joint.key === activeSocket.key;
+          const ringGeo = new THREE.TorusGeometry(isSelected ? 1.24 : 0.95, isSelected ? 0.15 : 0.1, 14, 32);
+          const ringMat = new THREE.MeshBasicMaterial({
+            color: isSelected ? 0xf59e0b : 0xa855f7,
+            transparent: true,
+            opacity: isSelected ? 0.96 : 0.58
+          });
+          const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+          ringMesh.position.copy(joint.pos);
+          ringMesh.rotation.x = Math.PI / 2;
+          ringMesh.userData.socketData = joint;
+          socketGroup.add(ringMesh);
+          socketIndicators.push(ringMesh);
+        });
+
+        const beaconGeo = new THREE.CylinderGeometry(0.14, 0.85, 8.0, 20, 1, true);
+        const beaconMat = new THREE.MeshBasicMaterial({
+          color: draggingPieceType ? 0xfacc15 : 0x22c55e,
+          transparent: true,
+          opacity: draggingPieceType ? 0.34 : 0.18,
+          side: THREE.DoubleSide
+        });
+        const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
+        beaconMesh.position.copy(activeSocket.pos).add(new THREE.Vector3(0, 4.0, 0));
+        socketGroup.add(beaconMesh);
+
+        const previewType = draggingPieceType || selectedPieceType;
+        const ghostMesh = createTrackPieceMesh(previewType, true);
+        ghostMesh.position.copy(activeSocket.pos);
+        ghostMesh.rotation.y = activeSocket.yaw;
+        ghostGroup.add(ghostMesh);
+      }
+
+      function autoLiftTowerIfNeeded(projectedExitY) {
+        const minSafeHeight = 1.65;
+        if (projectedExitY < minSafeHeight) {
+          const liftAmount = (minSafeHeight - projectedExitY) + 3.2;
+          trackNodes.forEach(node => {
+            node.pos.y += liftAmount;
+          });
+          camTarget.y += liftAmount * 0.45;
+          updateOrbitCamera();
+          sound.playTowerLiftSound();
+          showToast('🏗️ Tower automatically lifted higher so you can keep building!');
+          return liftAmount;
+        }
+        return 0;
+      }
+
+      function hideMergeFixPopup() {
+        const popup = document.getElementById('merge-fix-popup');
+        if (popup) popup.classList.add('hidden');
+      }
+
+      function showMergeFixPopup(problemNodeIndex, conflictingNode, isDeadEndBlock = false) {
+        const popup = document.getElementById('merge-fix-popup');
+        const desc = document.getElementById('merge-fix-desc');
+        const opts = document.getElementById('merge-fix-options');
+        if (!popup || !desc || !opts) return;
+
+        const problemNode = trackNodes[problemNodeIndex];
+        if (!problemNode) return;
+
+        const insertedDef = TRACK_DEFS[problemNode.type];
+        const conflictDef = conflictingNode ? TRACK_DEFS[conflictingNode.type] : null;
+        desc.textContent = isDeadEndBlock
+          ? `${insertedDef.name} closed off the track below! Keep both paths rolling with a Y-Splitter:`
+          : `${insertedDef.name} collided with ${conflictDef ? conflictDef.name : 'the track'}! Keep the ball rolling:`;
+
+        opts.innerHTML = '';
+
+        const hasDownstreamTrack = trackNodes.some(n => n.parentIndex === problemNodeIndex);
+        if (problemNode.type !== 'splitter' && (isDeadEndBlock || hasDownstreamTrack)) {
+          const splitBtn = document.createElement('button');
+          splitBtn.className = 'btn-tactile px-3.5 py-2.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 border-2 border-teal-200 w-full justify-center';
+          splitBtn.innerHTML = `<span>🔀</span><span>Add Y-Splitter + Keep ${insertedDef.name}</span>`;
+          splitBtn.addEventListener('click', () => {
+            const splitterDef = TRACK_DEFS.splitter;
+            const userPieceType = problemNode.type;
+            const userPieceDef = TRACK_DEFS[userPieceType];
+
+            problemNode.type = 'splitter';
+
+            const exit0 = splitterDef.exits[0];
+            const rotEx0 = exit0.pos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), problemNode.yaw);
+            const branch0Pos = problemNode.pos.clone().add(rotEx0);
+            const branch0Yaw = problemNode.yaw + exit0.yaw;
+            shiftSubtreeTransform(problemNodeIndex, 0, branch0Pos, branch0Yaw);
+
+            const exit1 = splitterDef.exits[1];
+            const rotEx1 = exit1.pos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), problemNode.yaw);
+            const branch1Pos = problemNode.pos.clone().add(rotEx1);
+            const branch1Yaw = problemNode.yaw + exit1.yaw;
+
+            if (userPieceDef && userPieceDef.exitPos) {
+              const rotExit = userPieceDef.exitPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), branch1Yaw);
+              autoLiftTowerIfNeeded(branch1Pos.y + rotExit.y);
+            } else {
+              autoLiftTowerIfNeeded(branch1Pos.y - 1.2);
+            }
+
+            const updatedSplitter = trackNodes[problemNodeIndex];
+            const finalBranch1Pos = updatedSplitter.pos.clone().add(
+              exit1.pos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), updatedSplitter.yaw)
+            );
+            trackNodes.push({
+              type: userPieceType,
+              pos: finalBranch1Pos,
+              yaw: updatedSplitter.yaw + exit1.yaw,
+              parentIndex: problemNodeIndex,
+              branch: 1
+            });
+
+            hideMergeFixPopup();
+            rebuildVisualTrackAndPins();
+            sound.playSnapClick();
+            showToast(`🔀 Y-Splitter added! Original track & ${insertedDef.name} both work!`);
+          });
+          opts.appendChild(splitBtn);
+        }
+
+        const candidateTypes = ['turnLeft', 'turnRight', 'uTurn', 'ramp'].filter(t => t !== problemNode.type);
+        candidateTypes.forEach(candType => {
+          const candDef = TRACK_DEFS[candType];
+          const rotExit = candDef.exitPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), problemNode.yaw);
+          const testExitPos = problemNode.pos.clone().add(rotExit);
+
+          const hitsExisting = trackNodes.some((other, oIdx) => {
+            if (oIdx === problemNodeIndex || oIdx === problemNode.parentIndex) return false;
+            return other.pos.distanceTo(testExitPos) < 2.2;
+          });
+
+          if (!hitsExisting) {
+            const btn = document.createElement('button');
+            btn.className = 'btn-tactile px-3 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold text-xs sm:text-sm flex items-center gap-1.5 border-2 border-emerald-200';
+            btn.innerHTML = `<span class="text-base">${candDef.icon}</span><span>Swap ${candDef.name}</span>`;
+            btn.addEventListener('click', () => {
+              problemNode.type = candType;
+              const newRotExit = candDef.exitPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), problemNode.yaw);
+              const nextPos = problemNode.pos.clone().add(newRotExit);
+              const nextYaw = problemNode.yaw + (candDef.exitYaw || 0);
+              shiftSubtreeTransform(problemNodeIndex, 0, nextPos, nextYaw);
+
+              hideMergeFixPopup();
+              rebuildVisualTrackAndPins();
+              sound.playSnapClick();
+              showToast(`✨ Swapped in ${candDef.name} for a clean path!`);
+            });
+            opts.appendChild(btn);
+          }
+        });
+
+        const clearDownstreamBtn = document.createElement('button');
+        clearDownstreamBtn.className = 'btn-tactile px-3 py-2 rounded-2xl bg-rose-500 hover:bg-rose-400 text-white font-extrabold text-xs sm:text-sm flex items-center gap-1.5 border-2 border-rose-200';
+        clearDownstreamBtn.innerHTML = `<span>✂️</span><span>Clear Blocking Track</span>`;
+        clearDownstreamBtn.addEventListener('click', () => {
+          const toRemove = new Set();
+          function collectChildren(pIdx) {
+            trackNodes.forEach((n, idx) => {
+              if (n.parentIndex === pIdx && !toRemove.has(idx)) {
+                toRemove.add(idx);
+                collectChildren(idx);
+              }
+            });
+          }
+          collectChildren(problemNodeIndex);
+
+          if (toRemove.size === 0 && conflictingNode) {
+            const cIdx = trackNodes.indexOf(conflictingNode);
+            if (cIdx > 0) {
+              toRemove.add(cIdx);
+              collectChildren(cIdx);
+            }
+          }
+
+          if (toRemove.size > 0) {
+            const oldNodes = [...trackNodes];
+            const indexMap = new Map();
+            const keptNodes = [];
+            oldNodes.forEach((n, oldIdx) => {
+              if (!toRemove.has(oldIdx)) {
+                indexMap.set(oldIdx, keptNodes.length);
+                keptNodes.push(n);
+              }
+            });
+            keptNodes.forEach(n => {
+              if (n.parentIndex >= 0 && indexMap.has(n.parentIndex)) {
+                n.parentIndex = indexMap.get(n.parentIndex);
+              }
+            });
+            trackNodes = keptNodes;
+          }
+
+          hideMergeFixPopup();
+          rebuildVisualTrackAndPins();
+          sound.playPopDelete();
+          showToast('✂️ Cleared blocking track pieces!');
+        });
+        opts.appendChild(clearDownstreamBtn);
+
+        popup.classList.remove('hidden');
+      }
+
+      function checkTrackCollisions(insertedNodeIndex) {
+        const insertedNode = trackNodes[insertedNodeIndex];
+        if (!insertedNode) return;
+        const def = TRACK_DEFS[insertedNode.type];
+        if (!def) return;
+
+        const hasDownstreamChildren = trackNodes.some(n => n.parentIndex === insertedNodeIndex);
+        if (!def.exitPos && hasDownstreamChildren) {
+          showMergeFixPopup(insertedNodeIndex, null, true);
+          return;
+        }
+
+        const samplePts = [];
+        [0.45, 0.85, 1.0].forEach(u => {
+          const lp = def.getLocalPoint(u, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), insertedNode.yaw).add(insertedNode.pos);
+          samplePts.push(lp);
+        });
+
+        for (let i = 0; i < trackNodes.length; i++) {
+          if (i === insertedNodeIndex || i === insertedNode.parentIndex) continue;
+          const other = trackNodes[i];
+          const otherDef = TRACK_DEFS[other.type];
+          if (!otherDef) continue;
+
+          for (let ou of [0.25, 0.65]) {
+            const otherPt = otherDef.getLocalPoint(ou, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), other.yaw).add(other.pos);
+            for (let sp of samplePts) {
+              if (sp.distanceTo(otherPt) < 1.65) {
+                showMergeFixPopup(insertedNodeIndex, other, false);
+                return;
+              }
+            }
+          }
+        }
+      }
+
+      function shiftSubtreeTransform(parentIdx, branchIdx, expectedPos, expectedYaw) {
+        trackNodes.forEach((child, cIdx) => {
+          if (child.parentIndex === parentIdx && (child.branch || 0) === branchIdx) {
+            const deltaYaw = expectedYaw - child.yaw;
+            const oldPos = child.pos.clone();
+            child.pos.copy(expectedPos);
+            child.yaw = expectedYaw;
+
+            const cDef = TRACK_DEFS[child.type];
+            if (!cDef) return;
+            if (cDef.isSplitter && cDef.exits) {
+              cDef.exits.forEach((ex, bIdx) => {
+                const rotEx = ex.pos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), child.yaw);
+                shiftSubtreeTransform(cIdx, bIdx, child.pos.clone().add(rotEx), child.yaw + ex.yaw);
+              });
+            } else if (cDef.exitPos) {
+              const rotEx = cDef.exitPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), child.yaw);
+              shiftSubtreeTransform(cIdx, 0, child.pos.clone().add(rotEx), child.yaw + (cDef.exitYaw || 0));
+            }
+          }
+        });
+      }
+
+      function snapNewPiece(pieceType = selectedPieceType) {
+        sound.unlock();
+        if (simState !== 'build') {
+          clearMarbles();
+        }
+        hideMergeFixPopup();
+
+        const socket = getOpenSocket();
+        if (!socket) {
+          showToast('Tap any glowing ring on the track to pick where to connect!');
+          return;
+        }
+
+        const def = TRACK_DEFS[pieceType];
+
+        if (socket.isSplice) {
+          const targetIdx = socket.replaceNodeIndex;
+          const oldNode = trackNodes[targetIdx];
+          if (!oldNode) return;
+
+          const startPos = oldNode.pos.clone();
+          const startYaw = oldNode.yaw;
+
+          if (def.isSplitter && def.exits) {
+            const lift = autoLiftTowerIfNeeded(startPos.y - 1.5);
+            startPos.y += lift;
+            oldNode.type = pieceType;
+            oldNode.pos.copy(startPos);
+            oldNode.yaw = startYaw;
+
+            const exit0 = def.exits[0];
+            const rotEx0 = exit0.pos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), startYaw);
+            const branch0Pos = startPos.clone().add(rotEx0);
+            const branch0Yaw = startYaw + exit0.yaw;
+            shiftSubtreeTransform(targetIdx, 0, branch0Pos, branch0Yaw);
+
+            targetedSocket = {
+              parentIndex: targetIdx,
+              branch: 1,
+              pos: startPos.clone().add(def.exits[1].pos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), startYaw)),
+              yaw: startYaw + def.exits[1].yaw,
+              key: `${targetIdx}:1`
+            };
+
+            rebuildVisualTrackAndPins();
+            sound.playSnapClick();
+            showToast('🔀 Y-Splitter inserted! Drop marbles now or extend the open branch!');
+            return;
+          }
+
+          if (def.exitPos) {
+            const rotExit = def.exitPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), startYaw);
+            const lift = autoLiftTowerIfNeeded(startPos.y + rotExit.y);
+            startPos.y += lift;
+            oldNode.type = pieceType;
+            oldNode.pos.copy(startPos);
+            oldNode.yaw = startYaw;
+
+            const nextPos = startPos.clone().add(rotExit);
+            const nextYaw = startYaw + (def.exitYaw || 0);
+            shiftSubtreeTransform(targetIdx, 0, nextPos, nextYaw);
+          } else {
+            oldNode.type = pieceType;
+          }
+
+          targetedSocket = null;
+          rebuildVisualTrackAndPins();
+          checkTrackCollisions(targetIdx);
+          sound.playSnapClick();
+          showToast(`✨ Inserted ${def.name} into the run!`);
+          return;
+        }
+
+        const startPos = socket.pos.clone();
+        const startYaw = socket.yaw;
+
+        if (def.exitPos) {
+          const rotExit = def.exitPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), startYaw);
+          const lift = autoLiftTowerIfNeeded(startPos.y + rotExit.y);
+          startPos.y += lift;
+        } else {
+          const lift = autoLiftTowerIfNeeded(startPos.y - 0.5);
+          startPos.y += lift;
+        }
+
+        const newIdx = trackNodes.length;
+        trackNodes.push({
+          type: pieceType,
+          pos: startPos,
+          yaw: startYaw,
+          parentIndex: socket.parentIndex,
+          branch: socket.branch || 0
+        });
+
+        targetedSocket = null;
+        rebuildVisualTrackAndPins();
+        checkTrackCollisions(newIdx);
+        sound.playSnapClick();
+      }
+
+      function autoCompleteTrackLoop() {
+        sound.unlock();
+        if (simState !== 'build') clearMarbles();
+        hideMergeFixPopup();
+
+        if (trackNodes.length === 0) return;
+
+        // Convert any dead-end finish catch trays into ramps so they can loop
+        trackNodes.forEach(node => {
+          if (node.type === 'finish') {
+            node.type = 'ramp';
+          }
+        });
+
+        let openSockets = getAllOpenSockets();
+        if (openSockets.length === 0) {
+          rebuildVisualTrackAndPins();
+          showToast('🛸 Track is already closed into an infinite loop!');
+          return;
+        }
+
+        let addedCount = 0;
+        const maxStepsPerBranch = 6;
+        const candidatePieces = ['ramp', 'turnLeft', 'turnRight', 'glowTrack'];
+
+        // Route each open socket neatly inside the play mat and cap with a Hyper-Loop Return
+        while (openSockets.length > 0 && addedCount < 24) {
+          const sock = openSockets[0];
+          const curPos = sock.pos.clone();
+          const curYaw = sock.yaw;
+          const distFromCenter = Math.hypot(curPos.x, curPos.z);
+          const forwardVec = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), curYaw);
+          const nextStepPos = curPos.clone().addScaledVector(forwardVec, 4.2);
+          const nextDist = Math.hypot(nextStepPos.x, nextStepPos.z);
+
+          // Check how many steps already chained on this branch
+          let chainDepth = 0;
+          let walkIdx = sock.parentIndex;
+          while (walkIdx > 0 && chainDepth < maxStepsPerBranch) {
+            chainDepth++;
+            walkIdx = trackNodes[walkIdx].parentIndex;
+          }
+
+          let chosenType = 'hyperLoop';
+
+          // If still near the top or outside the board rim, add smart guiding pieces onto the board first
+          if (chainDepth < maxStepsPerBranch && (distFromCenter > 9.5 || nextDist > 10.5 || curPos.y > 9.5)) {
+            let bestPiece = 'ramp';
+            let bestScore = Infinity;
+
+            candidatePieces.forEach(pType => {
+              const pDef = TRACK_DEFS[pType];
+              const rotEx = pDef.exitPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), curYaw);
+              const candidateExit = curPos.clone().add(rotEx);
+              const radialDist = Math.hypot(candidateExit.x, candidateExit.z);
+
+              // Penalize going outside the 11.5-unit Duplo play mat or colliding with existing pieces
+              let penalty = radialDist > 10.5 ? (radialDist - 10.5) * 25 : radialDist * 0.6;
+              trackNodes.forEach(existing => {
+                const d = existing.pos.distanceTo(candidateExit);
+                if (d < 2.3) penalty += 60;
+              });
+
+              if (penalty < bestScore) {
+                bestScore = penalty;
+                bestPiece = pType;
+              }
+            });
+
+            chosenType = bestPiece;
+          }
+
+          const def = TRACK_DEFS[chosenType];
+          const lift = def.exitPos
+            ? autoLiftTowerIfNeeded(curPos.y + def.exitPos.y)
+            : autoLiftTowerIfNeeded(curPos.y - 0.5);
+
+          trackNodes.push({
+            type: chosenType,
+            pos: curPos.clone().add(new THREE.Vector3(0, lift, 0)),
+            yaw: curYaw,
+            parentIndex: sock.parentIndex,
+            branch: sock.branch || 0
+          });
+
+          addedCount++;
+          openSockets = getAllOpenSockets();
+        }
+
+        targetedSocket = null;
+        rebuildVisualTrackAndPins();
+        sound.playTowerLiftSound();
+        showToast('🛸 Track completed & closed with Hyper-Loop Return! Hit Drop for an endless run!');
+      }
+
+      function undoLastPiece() {
+        sound.unlock();
+        if (simState !== 'build') clearMarbles();
+        hideMergeFixPopup();
+        if (trackNodes.length <= 1) {
+          showToast('Starter Drop Funnel cannot be removed!');
+          return;
+        }
+        trackNodes.pop();
+        targetedSocket = null;
+        rebuildVisualTrackAndPins();
+        sound.playPopDelete();
+      }
+
+      function clearTrackToStarter() {
+        sound.unlock();
+        clearMarbles();
+        hideMergeFixPopup();
+        currentPresetMelody = null;
+        melodyNoteCursor = 0;
+        targetedSocket = null;
+        trackNodes = [{
+          type: 'starter',
+          pos: new THREE.Vector3(0, 15.0, -5.0),
+          yaw: 0,
+          parentIndex: -1,
+          branch: 0
+        }];
+        camTarget.set(0, 6.2, 0);
+        updateOrbitCamera();
+        rebuildVisualTrackAndPins();
+        sound.playPopDelete();
+        showToast('Cleared to Starter Funnel — drag or tap pieces to build!');
+      }
+
+      function loadPreset(presetId) {
+        const preset = PRESET_BUILDS.find(p => p.id === presetId) || PRESET_BUILDS[0];
+        clearMarbles();
+        hideMergeFixPopup();
+        trackNodes = [];
+        targetedSocket = null;
+        currentPresetMelody = preset.melody || null;
+        melodyNoteCursor = 0;
+
+        if (preset.branches) {
+          preset.branches.forEach(step => {
+            if (step.parentIdx === -1) {
+              trackNodes.push({
+                type: step.type,
+                pos: preset.startPos.clone(),
+                yaw: preset.startYaw,
+                parentIndex: -1,
+                branch: 0
+              });
+            } else {
+              const pNode = trackNodes[step.parentIdx];
+              const pDef = TRACK_DEFS[pNode.type];
+              let exitOffset = pDef.exitPos;
+              let exitYaw = pDef.exitYaw || 0;
+              if (pDef.isSplitter && pDef.exits) {
+                const ex = pDef.exits[step.branch || 0];
+                exitOffset = ex.pos;
+                exitYaw = ex.yaw;
+              }
+              const rotExit = exitOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), pNode.yaw);
+              trackNodes.push({
+                type: step.type,
+                pos: pNode.pos.clone().add(rotExit),
+                yaw: pNode.yaw + exitYaw,
+                parentIndex: step.parentIdx,
+                branch: step.branch || 0
+              });
+            }
+          });
+        } else {
+          let curPos = preset.startPos.clone();
+          let curYaw = preset.startYaw;
+
+          preset.pieces.forEach((pType, idx) => {
+            trackNodes.push({
+              type: pType,
+              pos: curPos.clone(),
+              yaw: curYaw,
+              parentIndex: idx - 1,
+              branch: 0
+            });
+            const def = TRACK_DEFS[pType];
+            if (def.exitPos) {
+              const rotExit = def.exitPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), curYaw);
+              curPos.add(rotExit);
+              curYaw += (def.exitYaw || 0);
+            }
+          });
+        }
+
+        let minY = Infinity;
+        trackNodes.forEach(n => { if (n.pos.y < minY) minY = n.pos.y; });
+        if (minY < 1.8) {
+          const lift = (1.8 - minY) + 1.5;
+          trackNodes.forEach(n => { n.pos.y += lift; });
+        }
+
+        camTarget.set(0, 6.8, 0);
+        updateOrbitCamera();
+        rebuildVisualTrackAndPins();
+        sound.playSnapClick();
+        showToast(
+          currentPresetMelody
+            ? `🎵 Loaded "${preset.name}" — Drop marbles to hear the melody!`
+            : `Loaded "${preset.name}" — Drop marbles or snap more pieces!`
+        );
+      }
+
+      /**
+       * ============================================================================
+       * 8. MARBLE ENTITIES, CONFETTI, DETERMINISTIC PHYSICS & TIMELINE SCRUBBING
+       * ============================================================================
+       */
+      let selectedMarbleStyleIndex = 0;
+      let speedLevelIndex = 1;
+      let simState = 'build';
+      let isRideCam = false;
+      let steerInput = 0;
+
+      let activeMarbles = [];
+      let recordedFrames = [];
+      let playbackFrame = 0;
+
+      function launchGoalConfetti(worldPos) {
+        const colors = [0xf43f5e, 0xfacc15, 0x38bdf8, 0x22c55e, 0xa855f7];
+        for (let i = 0; i < 24; i++) {
+          const piece = new THREE.Mesh(
+            new THREE.BoxGeometry(0.18, 0.18, 0.06),
+            new THREE.MeshBasicMaterial({ color: colors[i % colors.length] })
+          );
+          piece.position.copy(worldPos).add(new THREE.Vector3((Math.random() - 0.5) * 1.4, 0.6, (Math.random() - 0.5) * 1.4));
+          confettiGroup.add(piece);
+          activeConfetti.push({
+            mesh: piece,
+            vel: new THREE.Vector3((Math.random() - 0.5) * 5.5, 4.0 + Math.random() * 4.5, (Math.random() - 0.5) * 5.5),
+            rotVel: new THREE.Vector3(Math.random() * 8, Math.random() * 8, Math.random() * 8),
+            life: 1.4
+          });
+        }
+      }
+
+      function createMarbleTexture(style) {
+        const c = document.createElement('canvas');
+        c.width = 128;
+        c.height = 128;
+        const ctx = c.getContext('2d');
+
+        ctx.fillStyle = style.primary;
+        ctx.fillRect(0, 0, 128, 128);
+
+        ctx.fillStyle = style.secondary;
+        ctx.beginPath();
+        ctx.ellipse(64, 64, 52, 22, Math.PI / 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.beginPath();
+        ctx.arc(44, 44, 18, 0, Math.PI * 2);
+        ctx.fill();
+
+        return new THREE.CanvasTexture(c);
+      }
+
+      function createMarbleMesh(styleIdx) {
+        const style = MARBLE_STYLES[styleIdx % MARBLE_STYLES.length];
+        const geo = new THREE.SphereGeometry(0.42, 28, 28);
+        const mat = new THREE.MeshPhysicalMaterial({
+          map: createMarbleTexture(style),
+          roughness: 0.08,
+          metalness: style.name === 'Chrome' ? 0.85 : 0.05,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.05
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.castShadow = true;
+        return mesh;
+      }
+
+      function clearMarbles() {
+        while (marbleGroup.children.length) marbleGroup.remove(marbleGroup.children[0]);
+        activeMarbles = [];
+        recordedFrames = [];
+        playbackFrame = 0;
+        simState = 'build';
+        sound.updateRollSound(0, 0);
+        showTimelinePanel(false);
+        rebuildVisualTrackAndPins();
+      }
+
+      function spawnSingleMarble(indexOffset = 0, totalBatch = 1) {
+        const styleIdx = (selectedMarbleStyleIndex + activeMarbles.length + indexOffset) % MARBLE_STYLES.length;
+        const mesh = createMarbleMesh(styleIdx);
+        marbleGroup.add(mesh);
+
+        const startNode = trackNodes[0];
+        const firstBranch = (startNode && startNode.type === 'splitter') ? ((activeMarbles.length + indexOffset) % 2) : 0;
+
+        const m = {
+          mesh: mesh,
+          nodeIndex: 0,
+          u: -indexOffset * 0.38,
+          lane: totalBatch > 1 ? (indexOffset - (totalBatch - 1) / 2) * 0.28 : ((Math.random() - 0.5) * 0.36),
+          laneVel: 0,
+          speed: 3.2,
+          branchChoice: firstBranch,
+          lastChimeBar: -1,
+          bellRung: false,
+          finished: false,
+          freeFall: false,
+          freeVel: new THREE.Vector3(),
+          pos: new THREE.Vector3(),
+          quat: new THREE.Quaternion()
+        };
+        computeMarbleWorldTransform(m, 0.016);
+        activeMarbles.push(m);
+      }
+
+      function dropMarbles(count = 1, appendMode = false) {
+        sound.unlock();
+        if (trackNodes.length === 0) return;
+
+        const shouldAppend = appendMode || (simState === 'running' && activeMarbles.length > 0);
+
+        while (ghostGroup.children.length) ghostGroup.remove(ghostGroup.children[0]);
+        while (socketGroup.children.length) socketGroup.remove(socketGroup.children[0]);
+
+        if (!shouldAppend) {
+          while (marbleGroup.children.length) marbleGroup.remove(marbleGroup.children[0]);
+          activeMarbles = [];
+          recordedFrames = [];
+          playbackFrame = 0;
+          melodyNoteCursor = 0;
+          splitterToggleCount = 0;
+
+          bowlingPins.forEach(pin => {
+            pin.knocked = false;
+            pin.mesh.position.copy(pin.basePos);
+            pin.mesh.rotation.set(0, 0, 0);
+            pin.vel.set(0, 0, 0);
+            pin.rotVel.set(0, 0, 0);
+          });
+        }
+
+        for (let i = 0; i < count; i++) {
+          spawnSingleMarble(i, count);
+        }
+
+        simState = 'running';
+        updatePlayPauseUI();
+        showTimelinePanel(true);
+        syncTimelineSliderUI();
+        sound.playSnapClick();
+        if (shouldAppend) {
+          showToast(`🟢 Added +${count} marble${count > 1 ? 's' : ''} (${activeMarbles.length} active)!`);
+        }
+      }
+
+      function computeMarbleWorldTransform(m, dt) {
+        if (!m || !m.mesh) return;
+        if (!m.pos) m.pos = new THREE.Vector3();
+        if (!m.quat) m.quat = new THREE.Quaternion();
+
+        if (m.freeFall) {
+          if (m.mesh.position) m.pos.copy(m.mesh.position);
+          if (m.mesh.quaternion) m.quat.copy(m.mesh.quaternion);
+          return;
+        }
+
+        const node = trackNodes[m.nodeIndex];
+        if (!node) return;
+        const def = TRACK_DEFS[node.type];
+        const clampedU = Math.max(0, Math.min(1, m.u));
+
+        const localP = def.getLocalPoint(clampedU, m.lane, m.branchChoice || 0);
+        const worldP = localP.applyAxisAngle(new THREE.Vector3(0, 1, 0), node.yaw).add(node.pos);
+        worldP.y += 0.16;
+
+        const prevPos = m.mesh.position.clone();
+        m.mesh.position.copy(worldP);
+        m.pos.copy(worldP);
+
+        const moveVec = worldP.clone().sub(prevPos);
+        const dist = moveVec.length();
+        if (dist > 0.0001) {
+          const axis = new THREE.Vector3(-moveVec.z, 0, moveVec.x).normalize();
+          if (axis.lengthSq() > 0.001) {
+            const q = new THREE.Quaternion().setFromAxisAngle(axis, dist / 0.42);
+            m.mesh.quaternion.premultiply(q);
+          }
+        }
+        m.quat.copy(m.mesh.quaternion);
+      }
+
+      function stepSimulation(rawDt) {
+        const dt = rawDt * SPEED_LEVELS[speedLevelIndex].mult;
+        let maxSpeed = 0;
+        let rollingCount = 0;
+
+        activeMarbles.forEach((m, idx) => {
+          if (m.freeFall) {
+            m.freeVel.y -= 18 * dt;
+            m.mesh.position.addScaledVector(m.freeVel, dt);
+            if (m.mesh.position.y <= 0.78) {
+              m.mesh.position.y = 0.78;
+              m.freeVel.y *= -0.35;
+              m.freeVel.x *= 0.94;
+              m.freeVel.z *= 0.94;
+            }
+            m.pos.copy(m.mesh.position);
+            m.quat.copy(m.mesh.quaternion);
+            return;
+          }
+
+          if (m.u < 0) {
+            m.u += dt * 1.4;
+            computeMarbleWorldTransform(m, dt);
+            return;
+          }
+
+          const node = trackNodes[m.nodeIndex];
+          if (!node) return;
+          const def = TRACK_DEFS[node.type];
+
+          if (isRideCam && idx === 0 && steerInput !== 0) {
+            m.laneVel += steerInput * 3.8 * dt;
+          }
+          m.laneVel *= Math.pow(0.08, dt);
+          m.lane = Math.max(-0.82, Math.min(0.82, m.lane + m.laneVel * dt));
+
+          if (def.special === 'boost') {
+            m.speed = Math.min(14.5, m.speed + 11.0 * dt);
+          } else if (def.special === 'finish') {
+            m.speed = Math.max(0, m.speed - 7.5 * dt);
+            if (m.u >= 0.82 && !m.finished) {
+              m.finished = true;
+              m.speed = 0;
+              sound.playFinishFanfare();
+              launchGoalConfetti(node.pos);
+              showToast('🎉 Goal Reached! Tap ➕ Marble or ⏪ Rewind anytime!');
+            }
+          } else if (def.special === 'hyperLoop') {
+            m.speed = Math.min(13.0, m.speed + 9.0 * dt);
+            if (m.u >= 0.85) {
+              sound.playHyperWarp();
+              launchGoalConfetti(node.pos);
+              m.nodeIndex = 0;
+              m.u = 0.02;
+              m.speed = 3.2;
+              m.lastChimeBar = -1;
+              m.bellRung = false;
+              const topNode = trackNodes[0];
+              if (topNode && topNode.type === 'splitter') {
+                m.branchChoice = (splitterToggleCount++) % 2;
+              } else {
+                m.branchChoice = 0;
+              }
+            }
+          } else if (def.special === 'spinner') {
+            m.speed = Math.min(9.5, Math.max(3.6, m.speed + 2.6 * dt));
+            if (m.u >= 0.35 && m.u <= 0.65) {
+              const trackMesh = trackGroup.children.find(c => c.userData.nodeIndex === m.nodeIndex);
+              if (trackMesh) {
+                trackMesh.userData.spinBoost = 9.5;
+              }
+            }
+          } else if (def.special === 'bellGate') {
+            m.speed = Math.min(9.8, Math.max(3.8, m.speed + 2.8 * dt));
+            if (m.u >= 0.45 && !m.bellRung) {
+              m.bellRung = true;
+              sound.playBellRing();
+            }
+          } else if (def.special === 'glowTrack') {
+            m.speed = Math.min(10.2, Math.max(3.8, m.speed + 3.0 * dt));
+            const stripIdx = Math.floor(m.u * 5);
+            if (stripIdx !== m.lastChimeBar && stripIdx >= 0 && stripIdx < 5) {
+              m.lastChimeBar = stripIdx;
+              const trackMesh = trackGroup.children.find(c => c.userData.nodeIndex === m.nodeIndex);
+              if (trackMesh && trackMesh.userData.glowMats && trackMesh.userData.glowMats[stripIdx]) {
+                const mat = trackMesh.userData.glowMats[stripIdx];
+                mat.emissive.setHex(0xfacc15);
+                mat.emissiveIntensity = 1.6;
+                setTimeout(() => {
+                  mat.emissive.setHex(0x38bdf8);
+                  mat.emissiveIntensity = 0.35;
+                }, 420);
+              }
+              if (currentPresetMelody) {
+                const noteFreq = currentPresetMelody.notes[melodyNoteCursor % currentPresetMelody.notes.length];
+                melodyNoteCursor++;
+                sound.playMusicNote(noteFreq, 0.78, currentPresetMelody.instrument);
+              } else {
+                sound.playChime(stripIdx + m.nodeIndex);
+              }
+            }
+          } else if (def.special === 'vortex') {
+            m.speed = Math.min(9.2, Math.max(3.8, m.speed + 2.2 * dt));
+          } else {
+            m.speed = Math.min(9.6, Math.max(3.4, m.speed + 2.8 * dt));
+          }
+
+          if (def.special === 'chime') {
+            const barIdx = Math.floor(m.u * 6);
+            if (barIdx !== m.lastChimeBar && barIdx >= 0 && barIdx < 6) {
+              m.lastChimeBar = barIdx;
+              if (currentPresetMelody) {
+                const noteFreq = currentPresetMelody.notes[melodyNoteCursor % currentPresetMelody.notes.length];
+                melodyNoteCursor++;
+                sound.playMusicNote(noteFreq, 0.85, currentPresetMelody.instrument);
+              } else {
+                sound.playChime(barIdx + m.nodeIndex);
+              }
+            }
+          }
+
+          m.u += (m.speed / def.length) * dt;
+
+          if (m.u >= 1.0) {
+            const completedNodeIdx = m.nodeIndex;
+            const completedBranch = def.isSplitter ? (m.branchChoice || 0) : 0;
+            const nextIdx = trackNodes.findIndex(
+              n => n.parentIndex === completedNodeIdx && (n.branch || 0) === completedBranch
+            );
+
+            if (nextIdx !== -1) {
+              m.u -= 1.0;
+              m.nodeIndex = nextIdx;
+              m.lastChimeBar = -1;
+              m.bellRung = false;
+
+              const nextNode = trackNodes[nextIdx];
+              const nextDef = TRACK_DEFS[nextNode.type];
+              if (nextDef && nextDef.isSplitter) {
+                if (isRideCam && idx === 0 && steerInput !== 0) {
+                  m.branchChoice = steerInput < 0 ? 1 : 0;
+                } else {
+                  m.branchChoice = (splitterToggleCount++) % 2;
+                }
+              } else {
+                m.branchChoice = 0;
+              }
+            } else if (def.special === 'finish') {
+              m.u = 0.88;
+              m.speed = 0;
+              if (!m.finished) {
+                m.finished = true;
+                sound.playFinishFanfare();
+                launchGoalConfetti(node.pos);
+              }
+            } else if (def.special === 'hyperLoop') {
+              sound.playHyperWarp();
+              launchGoalConfetti(node.pos);
+              m.nodeIndex = 0;
+              m.u = 0.02;
+              m.speed = 3.2;
+              m.lastChimeBar = -1;
+              m.bellRung = false;
+            } else {
+              m.freeFall = true;
+              const exitDir = new THREE.Vector3(0, -0.25, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), node.yaw);
+              m.freeVel.copy(exitDir).multiplyScalar(m.speed * 0.75);
+            }
+          }
+
+          computeMarbleWorldTransform(m, dt);
+
+          if (m.speed > 0.1 && !m.finished) {
+            maxSpeed = Math.max(maxSpeed, m.speed);
+            rollingCount++;
+          }
+        });
+
+        bowlingPins.forEach(pin => {
+          if (!pin.knocked) {
+            activeMarbles.forEach(m => {
+              if (m.pos.distanceTo(pin.mesh.position) < 0.56) {
+                pin.knocked = true;
+                pin.vel.set((Math.random() - 0.5) * 3.5, 3.2, (Math.random() - 0.5) * 3.5);
+                pin.rotVel.set((Math.random() - 0.5) * 10, 4, (Math.random() - 0.5) * 10);
+                sound.playSnapClick();
+              }
+            });
+          } else if (pin.mesh.position.y > 0.4) {
+            pin.vel.y -= 15 * dt;
+            pin.mesh.position.addScaledVector(pin.vel, dt);
+            pin.mesh.rotation.x += pin.rotVel.x * dt;
+            pin.mesh.rotation.z += pin.rotVel.z * dt;
+          }
+        });
+
+        sound.updateRollSound(maxSpeed, rollingCount);
+
+        if (recordedFrames.length >= 1800) {
+          recordedFrames.shift();
+        }
+        recordedFrames.push({
+          marbles: activeMarbles.map(m => ({
+            pos: m.pos.clone(),
+            quat: m.quat.clone(),
+            speed: m.speed,
+            nodeIndex: m.nodeIndex,
+            u: m.u
+          })),
+          pins: bowlingPins.map(p => ({
+            pos: p.mesh.position.clone(),
+            rot: p.mesh.rotation.clone(),
+            knocked: p.knocked
+          }))
+        });
+        playbackFrame = recordedFrames.length - 1;
+        syncTimelineSliderUI();
+      }
+
+      function applyRecordedFrame(frameIdx) {
+        if (recordedFrames.length === 0) return;
+        const clamped = Math.max(0, Math.min(recordedFrames.length - 1, frameIdx));
+        playbackFrame = clamped;
+        const snap = recordedFrames[clamped];
+
+        snap.marbles.forEach((ms, idx) => {
+          if (activeMarbles[idx] && activeMarbles[idx].mesh) {
+            activeMarbles[idx].mesh.position.copy(ms.pos);
+            activeMarbles[idx].mesh.quaternion.copy(ms.quat);
+            activeMarbles[idx].pos.copy(ms.pos);
+            activeMarbles[idx].quat.copy(ms.quat);
+            activeMarbles[idx].speed = ms.speed;
+            activeMarbles[idx].nodeIndex = ms.nodeIndex;
+            activeMarbles[idx].u = ms.u;
+          }
+        });
+
+        snap.pins.forEach((ps, idx) => {
+          if (bowlingPins[idx]) {
+            bowlingPins[idx].mesh.position.copy(ps.pos);
+            bowlingPins[idx].mesh.rotation.copy(ps.rot);
+            bowlingPins[idx].knocked = ps.knocked;
+          }
+        });
+
+        syncTimelineSliderUI();
+      }
+
+      /**
+       * ============================================================================
+       * 9. UI WIRING, TOUCH GESTURES & ANIMATION LOOP
+       * ============================================================================
+       */
+      let toastTimeout = null;
+      function showToast(msg) {
+        const toast = document.getElementById('toast-banner');
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.style.opacity = '1';
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+          toast.style.opacity = '0';
+        }, 3200);
+      }
+
+      function createDragBadge(def) {
+        removeDragBadge();
+        const el = document.createElement('div');
+        el.className = 'fixed z-50 pointer-events-none px-4 py-2 rounded-2xl bg-emerald-500 text-white font-black text-sm shadow-2xl border-2 border-white flex items-center gap-2 -translate-x-1/2 -translate-y-full';
+        el.innerHTML = `<span class="text-xl">${def.icon}</span><span>Drop on Glowing Ring!</span>`;
+        document.body.appendChild(el);
+        dragGhostBadge = el;
+      }
+
+      function updateDragBadge(x, y, snapped) {
+        if (!dragGhostBadge) return;
+        dragGhostBadge.style.left = `${x}px`;
+        dragGhostBadge.style.top = `${y - 16}px`;
+        dragGhostBadge.style.backgroundColor = snapped ? '#16a34a' : '#0284c7';
+        dragGhostBadge.querySelector('span:last-child').textContent = snapped
+          ? 'Release to Snap Here!'
+          : 'Drag to Any Glowing Ring';
+      }
+
+      function removeDragBadge() {
+        if (dragGhostBadge) {
+          dragGhostBadge.remove();
+          dragGhostBadge = null;
+        }
+      }
+
+      function renderPiecePalette() {
+        const paletteEl = document.getElementById('piece-palette');
+        if (!paletteEl) return;
+        paletteEl.innerHTML = '';
+
+        DOCK_PIECES.forEach(typeId => {
+          const def = TRACK_DEFS[typeId];
+          const isSelected = typeId === selectedPieceType;
+
+          const btn = document.createElement('button');
+          btn.title = def.name;
+          btn.setAttribute('aria-label', def.name);
+          btn.className = `btn-tactile shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl flex items-center justify-center border-2 ${
+            isSelected
+              ? 'bg-emerald-500 text-white border-emerald-200 ring-2 ring-emerald-300/60'
+              : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+          }`;
+          btn.innerHTML = `<span class="text-lg sm:text-xl leading-none pointer-events-none">${def.icon}</span>`;
+
+          btn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            sound.unlock();
+            selectedPieceType = typeId;
+            if (simState !== 'build') clearMarbles();
+            updateGhostAndSocket();
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            let startedDrag = false;
+
+            const onWinMove = (ev) => {
+              const dist = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+              if (!startedDrag && dist > 8) {
+                startedDrag = true;
+                draggingPieceType = typeId;
+                createDragBadge(def);
+              }
+              if (startedDrag) {
+                const nearSock = findNearestSocketToScreen(ev.clientX, ev.clientY, 175);
+                if (nearSock) {
+                  targetedSocket = nearSock;
+                  updateGhostAndSocket();
+                }
+                updateDragBadge(ev.clientX, ev.clientY, !!nearSock);
+              }
+            };
+
+            const onWinUp = (ev) => {
+              window.removeEventListener('pointermove', onWinMove);
+              window.removeEventListener('pointerup', onWinUp);
+              window.removeEventListener('pointercancel', onWinUp);
+
+              if (startedDrag) {
+                const nearSock = findNearestSocketToScreen(ev.clientX, ev.clientY, 195);
+                draggingPieceType = null;
+                removeDragBadge();
+                if (nearSock) {
+                  targetedSocket = nearSock;
+                  snapNewPiece(typeId);
+                } else {
+                  updateGhostAndSocket();
+                  showToast('Drag onto any glowing ring on the tower to snap!');
+                }
+              } else {
+                renderPiecePalette();
+              }
+            };
+
+            window.addEventListener('pointermove', onWinMove);
+            window.addEventListener('pointerup', onWinUp);
+            window.addEventListener('pointercancel', onWinUp);
+          });
+
+          paletteEl.appendChild(btn);
+        });
+      }
+
+      // Render Presets Modal
+      const presetsModal = document.getElementById('presets-modal');
+      const presetsGrid = document.getElementById('presets-grid');
+
+      function renderPresetsModal() {
+        if (!presetsGrid) return;
+        presetsGrid.innerHTML = '';
+        PRESET_BUILDS.forEach(preset => {
+          const card = document.createElement('button');
+          card.className = 'btn-tactile text-left p-4 rounded-2xl bg-sky-50 hover:bg-sky-100 border-2 border-sky-200 flex flex-col justify-between gap-2';
+          card.innerHTML = `
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-lg font-black text-slate-800">${preset.name}</span>
+              <span class="text-xs font-extrabold px-2.5 py-1 rounded-full ${preset.badgeColor || 'bg-sky-600'} text-white">${preset.badge}</span>
+            </div>
+            <p class="text-xs sm:text-sm font-semibold text-slate-600">${preset.desc}</p>
+          `;
+          card.addEventListener('click', () => {
+            presetsModal.classList.add('hidden');
+            loadPreset(preset.id);
+          });
+          presetsGrid.appendChild(card);
+        });
+      }
+
+      document.getElementById('btn-presets').addEventListener('click', () => {
+        sound.unlock();
+        renderPresetsModal();
+        presetsModal.classList.remove('hidden');
+      });
+
+      document.getElementById('btn-close-presets').addEventListener('click', () => {
+        presetsModal.classList.add('hidden');
+      });
+
+      // Marble Customizer Toggle
+      document.getElementById('btn-marble-style').addEventListener('click', () => {
+        sound.unlock();
+        selectedMarbleStyleIndex = (selectedMarbleStyleIndex + 1) % MARBLE_STYLES.length;
+        const st = MARBLE_STYLES[selectedMarbleStyleIndex];
+        document.getElementById('marble-preview-dot').style.background = st.css;
+        document.getElementById('marble-style-label').textContent = st.name;
+        sound.playSnapClick();
+      });
+
+      // World Theme Toggle
+      let currentThemeIndex = 0;
+      document.getElementById('btn-theme-toggle').addEventListener('click', () => {
+        sound.unlock();
+        currentThemeIndex = (currentThemeIndex + 1) % WORLD_THEMES.length;
+        const th = WORLD_THEMES[currentThemeIndex];
+        scene.background.setHex(th.bg);
+        scene.fog.color.setHex(th.fog);
+        document.body.style.backgroundColor = th.bodyBg;
+        hemiLight.color.setHex(th.hemiSky);
+        hemiLight.groundColor.setHex(th.hemiGround);
+        dirLight.color.setHex(th.dirColor);
+        dirLight.intensity = th.dirIntensity;
+        matBaseMat.color.setHex(th.matBase);
+        matRimMat.color.setHex(th.matRim);
+        studMat.color.setHex(th.studColor);
+        document.getElementById('theme-icon').textContent = th.icon;
+        document.getElementById('theme-label').textContent = th.name;
+        sound.playSnapClick();
+        showToast(`${th.icon} Theme switched to ${th.name}!`);
+      });
+
+      // Drop Controls
+      document.getElementById('btn-drop-one').addEventListener('click', () => dropMarbles(1, false));
+      document.getElementById('btn-drop-multi').addEventListener('click', () => dropMarbles(3, false));
+
+      // Builder Controls
+      document.getElementById('btn-snap-piece').addEventListener('click', () => snapNewPiece());
+      document.getElementById('btn-complete-track').addEventListener('click', autoCompleteTrackLoop);
+      document.getElementById('btn-undo-piece').addEventListener('click', undoLastPiece);
+      document.getElementById('btn-clear-track').addEventListener('click', clearTrackToStarter);
+      document.getElementById('btn-dismiss-merge-fix').addEventListener('click', hideMergeFixPopup);
+
+      // Speed Toggle
+      document.getElementById('btn-speed').addEventListener('click', () => {
+        sound.unlock();
+        speedLevelIndex = (speedLevelIndex + 1) % SPEED_LEVELS.length;
+        const sp = SPEED_LEVELS[speedLevelIndex];
+        document.getElementById('speed-icon').textContent = sp.icon;
+        document.getElementById('speed-label').textContent = sp.label;
+        sound.playSnapClick();
+        showToast(`${sp.icon} Marble Speed: ${sp.name} (${sp.label})`);
+      });
+
+      // Sound Toggle
+      const btnSound = document.getElementById('btn-sound');
+      btnSound.addEventListener('click', () => {
+        sound.unlock();
+        sound.setMuted(!sound.muted);
+        btnSound.textContent = sound.muted ? '🔇' : '🔊';
+      });
+
+      // First-Person Marble Cam Toggle
+      const rideControls = document.getElementById('ride-controls');
+      const rideCamLabel = document.getElementById('ride-cam-label');
+      const btnRideCam = document.getElementById('btn-ride-cam');
+
+      function setRideCam(enabled) {
+        isRideCam = enabled;
+        if (isRideCam) {
+          if (simState === 'build' || activeMarbles.length === 0) {
+            dropMarbles(1);
+          }
+          rideControls.classList.remove('hidden');
+          rideCamLabel.textContent = 'Exit Cam';
+          btnRideCam.classList.replace('bg-indigo-600', 'bg-amber-500');
+          showToast('🎢 Marble Cam Active! Tap LEFT or RIGHT to steer!');
+        } else {
+          rideControls.classList.add('hidden');
+          rideCamLabel.textContent = 'Marble Cam';
+          btnRideCam.classList.replace('bg-amber-500', 'bg-indigo-600');
+          steerInput = 0;
+          updateOrbitCamera();
+        }
+      }
+
+      btnRideCam.addEventListener('click', () => {
+        sound.unlock();
+        setRideCam(!isRideCam);
+      });
+
+      // Steering Pad Touch & Mouse Hold Events
+      const steerLeftBtn = document.getElementById('steer-left');
+      const steerRightBtn = document.getElementById('steer-right');
+
+      const bindSteerHold = (el, dir) => {
+        const start = (e) => { e.preventDefault(); steerInput = dir; };
+        const end = (e) => { e.preventDefault(); if (steerInput === dir) steerInput = 0; };
+        el.addEventListener('pointerdown', start);
+        el.addEventListener('pointerup', end);
+        el.addEventListener('pointerleave', end);
+        el.addEventListener('pointercancel', end);
+      };
+      bindSteerHold(steerLeftBtn, 1);
+      bindSteerHold(steerRightBtn, -1);
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') steerInput = 1;
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') steerInput = -1;
+      });
+      window.addEventListener('keyup', (e) => {
+        if (['ArrowLeft', 'a', 'A', 'ArrowRight', 'd', 'D'].includes(e.key)) steerInput = 0;
+      });
+
+      // Timeline Rewind & Scrubbing Controls
+      const timelinePanel = document.getElementById('timeline-panel');
+      const scrubberDrawer = document.getElementById('scrubber-drawer');
+      const toggleScrubberLabel = document.getElementById('toggle-scrubber-label');
+      const builderDock = document.getElementById('builder-dock');
+      const timelineSlider = document.getElementById('timeline-slider');
+      const scrubberTimeLabel = document.getElementById('scrubber-time-label');
+      const scrubberModeBadge = document.getElementById('scrubber-mode-badge');
+      const btnPlayPause = document.getElementById('btn-play-pause');
+
+      let isScrubberOpen = false;
+
+      function setScrubberOpen(open) {
+        isScrubberOpen = open;
+        if (open) {
+          scrubberDrawer.classList.remove('hidden');
+          toggleScrubberLabel.textContent = 'Hide Slider';
+        } else {
+          scrubberDrawer.classList.add('hidden');
+          toggleScrubberLabel.textContent = 'Rewind';
+        }
+      }
+
+      document.getElementById('btn-toggle-scrubber').addEventListener('click', () => {
+        sound.unlock();
+        setScrubberOpen(!isScrubberOpen);
+        sound.playSnapClick();
+      });
+
+      document.getElementById('btn-add-more-marble').addEventListener('click', () => {
+        dropMarbles(1, true);
+      });
+
+      function showTimelinePanel(visible) {
+        if (visible) {
+          timelinePanel.classList.remove('hidden');
+          builderDock.classList.add('hidden');
+        } else {
+          timelinePanel.classList.add('hidden');
+          builderDock.classList.remove('hidden');
+          setScrubberOpen(false);
+        }
+      }
+
+      function updatePlayPauseUI() {
+        btnPlayPause.textContent = simState === 'running' ? '⏸️' : '▶️';
+      }
+
+      function syncTimelineSliderUI() {
+        const maxIdx = Math.max(0, recordedFrames.length - 1);
+        timelineSlider.max = String(maxIdx);
+        timelineSlider.value = String(playbackFrame);
+
+        const curSec = (playbackFrame / 60).toFixed(1);
+        const totSec = (maxIdx / 60).toFixed(1);
+        scrubberTimeLabel.textContent = `${curSec}s / ${totSec}s`;
+
+        if (simState === 'scrub') {
+          scrubberModeBadge.textContent = '⏪ Rewinding / Scrubbing Timeline';
+          scrubberModeBadge.className = 'text-xs sm:text-sm font-black text-amber-800 bg-amber-100 px-3 py-0.5 rounded-full';
+        } else {
+          scrubberModeBadge.textContent = '🟢 Live Marble Run (Drag Slider to Rewind)';
+          scrubberModeBadge.className = 'text-xs sm:text-sm font-black text-sky-700 bg-sky-100 px-3 py-0.5 rounded-full';
+        }
+      }
+
+      timelineSlider.addEventListener('input', () => {
+        sound.unlock();
+        simState = 'scrub';
+        updatePlayPauseUI();
+        sound.updateRollSound(0, 0);
+        applyRecordedFrame(parseInt(timelineSlider.value, 10));
+      });
+
+      btnPlayPause.addEventListener('click', () => {
+        sound.unlock();
+        if (simState === 'running') {
+          simState = 'paused';
+          sound.updateRollSound(0, 0);
+        } else {
+          if (playbackFrame < recordedFrames.length - 1) {
+            recordedFrames = recordedFrames.slice(0, playbackFrame + 1);
+          }
+          simState = 'running';
+        }
+        updatePlayPauseUI();
+        syncTimelineSliderUI();
+      });
+
+      document.getElementById('btn-replay').addEventListener('click', () => {
+        sound.unlock();
+        if (recordedFrames.length > 0) {
+          applyRecordedFrame(0);
+          recordedFrames = recordedFrames.slice(0, 1);
+          simState = 'running';
+          updatePlayPauseUI();
+          syncTimelineSliderUI();
+          sound.playSnapClick();
+        }
+      });
+
+      document.getElementById('btn-clear-marbles').addEventListener('click', () => {
+        if (isRideCam) setRideCam(false);
+        clearMarbles();
+      });
+
+      // Touch & Mouse Orbit / Pinch-Zoom + Tap/Drag on 3D Sockets & Track Pieces
+      const raycaster = new THREE.Raycaster();
+      const pointerNDC = new THREE.Vector2();
+      const activePointers = new Map();
+      let prevPinchDist = null;
+      let pointerDownPos = { x: 0, y: 0 };
+
+      const domEl = renderer.domElement;
+
+      domEl.addEventListener('pointerdown', (e) => {
+        sound.unlock();
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        pointerDownPos = { x: e.clientX, y: e.clientY };
+
+        if (activePointers.size === 1 && simState === 'build') {
+          const rect = domEl.getBoundingClientRect();
+          pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          raycaster.setFromCamera(pointerNDC, camera);
+
+          const sockHits = raycaster.intersectObjects(socketIndicators, false);
+          if (sockHits.length > 0 && sockHits[0].object.userData.socketData) {
+            targetedSocket = sockHits[0].object.userData.socketData;
+            updateGhostAndSocket();
+            sound.playSnapClick();
+            showToast('🟢 Target socket selected! Drag or tap a piece to connect here.');
+            return;
+          }
+
+          const trackHits = raycaster.intersectObjects(trackGroup.children, true);
+          if (trackHits.length > 0) {
+            let obj = trackHits[0].object;
+            while (obj && obj.userData.nodeIndex === undefined) obj = obj.parent;
+            if (obj && obj.userData.nodeIndex > 0) {
+              const nIdx = obj.userData.nodeIndex;
+              const isLeaf = !trackNodes.some(n => n.parentIndex === nIdx);
+              if (isLeaf) {
+                draggingExistingNodeIndex = nIdx;
+                draggingPieceType = trackNodes[nIdx].type;
+                createDragBadge(TRACK_DEFS[draggingPieceType]);
+                updateDragBadge(e.clientX, e.clientY, false);
+              }
+            }
+          }
+        }
+
+        if (activePointers.size === 2) {
+          const pts = Array.from(activePointers.values());
+          prevPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        }
+      });
+
+      domEl.addEventListener('pointermove', (e) => {
+        if (!activePointers.has(e.pointerId)) return;
+        const prev = activePointers.get(e.pointerId);
+        const dx = e.clientX - prev.x;
+        const dy = e.clientY - prev.y;
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (draggingExistingNodeIndex !== -1) {
+          const nearSock = findNearestSocketToScreen(e.clientX, e.clientY, 175);
+          if (nearSock && nearSock.parentIndex !== draggingExistingNodeIndex) {
+            targetedSocket = nearSock;
+            updateGhostAndSocket();
+          }
+          updateDragBadge(e.clientX, e.clientY, !!nearSock);
+          return;
+        }
+
+        if (isRideCam) return;
+
+        if (activePointers.size === 1) {
+          camTheta -= dx * 0.0075;
+          camPhi -= dy * 0.0065;
+          updateOrbitCamera();
+        } else if (activePointers.size === 2) {
+          const pts = Array.from(activePointers.values());
+          const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          if (prevPinchDist !== null) {
+            const delta = prevPinchDist - dist;
+            camRadius += delta * 0.045;
+            updateOrbitCamera();
+          }
+          prevPinchDist = dist;
+        }
+      });
+
+      const handlePointerUp = (e) => {
+        activePointers.delete(e.pointerId);
+        if (activePointers.size < 2) prevPinchDist = null;
+
+        if (draggingExistingNodeIndex !== -1) {
+          const movedNodeIdx = draggingExistingNodeIndex;
+          const movedType = draggingPieceType;
+          const nearSock = findNearestSocketToScreen(e.clientX, e.clientY, 195);
+          draggingExistingNodeIndex = -1;
+          draggingPieceType = null;
+          removeDragBadge();
+
+          if (nearSock && nearSock.parentIndex !== movedNodeIdx) {
+            trackNodes.splice(movedNodeIdx, 1);
+            targetedSocket = nearSock;
+            snapNewPiece(movedType);
+            showToast(`✨ Moved ${TRACK_DEFS[movedType].name} to new branch!`);
+          } else {
+            updateGhostAndSocket();
+          }
+          return;
+        }
+
+        const moved = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+        if (moved < 10 && activeMarbles.length > 0 && !isRideCam) {
+          const rect = domEl.getBoundingClientRect();
+          pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          raycaster.setFromCamera(pointerNDC, camera);
+          const hits = raycaster.intersectObjects(marbleGroup.children, false);
+          if (hits.length > 0) {
+            setRideCam(true);
+          }
+        }
+      };
+
+      domEl.addEventListener('pointerup', handlePointerUp);
+      domEl.addEventListener('pointercancel', handlePointerUp);
+
+      domEl.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (isRideCam) return;
+        camRadius += e.deltaY * 0.025;
+        updateOrbitCamera();
+      }, { passive: false });
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // Smooth First-Person Marble Cam Tracking
+      const smoothCamPos = new THREE.Vector3();
+      const smoothLookAt = new THREE.Vector3();
+
+      function updateCamera(dt) {
+        if (isRideCam && activeMarbles.length > 0) {
+          const lead = activeMarbles[0];
+          const node = trackNodes[lead.nodeIndex];
+          const forward = new THREE.Vector3(0, -0.25, 1);
+          if (node) {
+            forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), node.yaw);
+          }
+
+          const desiredPos = lead.pos.clone()
+            .sub(forward.clone().multiplyScalar(2.35))
+            .add(new THREE.Vector3(0, 1.35, 0));
+          const desiredLook = lead.pos.clone()
+            .add(forward.clone().multiplyScalar(3.6))
+            .add(new THREE.Vector3(0, 0.25, 0));
+
+          smoothCamPos.lerp(desiredPos, 1 - Math.pow(0.002, dt));
+          smoothLookAt.lerp(desiredLook, 1 - Math.pow(0.002, dt));
+
+          camera.position.copy(smoothCamPos);
+          camera.lookAt(smoothLookAt);
+        }
+      }
+
+      // Main 60fps Animation Loop
+      let lastTime = performance.now();
+      function animate(now) {
+        requestAnimationFrame(animate);
+        const dt = Math.min((now - lastTime) / 1000, 0.05);
+        lastTime = now;
+
+        if (simState === 'running') {
+          stepSimulation(dt);
+        }
+
+        // Rotate kinetic paddle wheels
+        activeSpinners.forEach(spMesh => {
+          const wheel = spMesh.userData.spinnerWheel;
+          if (wheel) {
+            const baseSpeed = 1.4;
+            spMesh.userData.spinBoost = Math.max(0, (spMesh.userData.spinBoost || 0) - dt * 3.5);
+            wheel.rotation.x += (baseSpeed + spMesh.userData.spinBoost) * dt;
+          }
+        });
+
+        // Update 3D goal confetti particles
+        for (let i = activeConfetti.length - 1; i >= 0; i--) {
+          const c = activeConfetti[i];
+          c.life -= dt;
+          if (c.life <= 0) {
+            confettiGroup.remove(c.mesh);
+            activeConfetti.splice(i, 1);
+          } else {
+            c.vel.y -= 9.5 * dt;
+            c.mesh.position.addScaledVector(c.vel, dt);
+            c.mesh.rotation.x += c.rotVel.x * dt;
+            c.mesh.rotation.y += c.rotVel.y * dt;
+          }
+        }
+
+        // Subtle pulse on ghost preview & open socket rings
+        if (simState === 'build' && socketGroup.children.length > 0) {
+          const pulse = 1 + Math.sin(now * 0.006) * 0.08;
+          socketIndicators.forEach(ind => {
+            ind.scale.set(pulse, pulse, 1);
+          });
+        }
+
+        updateCamera(dt);
+        renderer.render(scene, camera);
+      }
+
+      // Initialize App with Default Grand Helix Palace Build
+      renderPiecePalette();
+      loadPreset('grand_helix');
+      requestAnimationFrame(animate);
+    });
+  </script>
+</body>
+</html>
