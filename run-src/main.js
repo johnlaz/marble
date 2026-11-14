@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '0.4';
+const VERSION = '0.5';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -1274,16 +1274,72 @@ function thumb(seq) {
   }
   return svg + '</svg>';
 }
+
+/* ---------------------------------------------------------------- stitch several library runs into one */
+const STITCH_MAX = 6;
+const MIRROR = { left: 'right', right: 'left', spiralL: 'spiralR', spiralR: 'spiralL' };
+const mirrorSeq = (seq) => seq.map((it) => (typeof it === 'string' ? (MIRROR[it] || it) : it.map(mirrorSeq)));
+function appendSeq(seq, tail) {
+  // continue a run from its finish: replace the final 'end' (or drop a final 'loop'); after a splitter the first branch carries on
+  const out = seq.slice(), last = out[out.length - 1];
+  if (Array.isArray(last)) { out[out.length - 1] = last.map((br, k) => (k === 0 ? appendSeq(br, tail) : br)); return out; }
+  if (last === 'end' || last === 'loop') out.pop();
+  return out.concat(tail);
+}
+function clashPairs(b) {
+  const list = [...computeAll(b).values()]; let n = 0;
+  for (const L of list) for (const d of L.dense) if (d.p.y < 0.3) { n += 1; break; }
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const A = list[i], B = list[j];
+    if (A.parent === B.id || B.parent === A.id) continue;
+    let hit = false;
+    for (const a of A.dense) { for (const c of B.dense) { const thr = 0.3 + 0.5 * Math.max(a.w, c.w); if (a.p.distanceToSquared(c.p) < thr * thr) { hit = true; break; } } if (hit) break; }
+    if (hit) n++;
+  }
+  return n;
+}
+function stitchItems(items) {
+  // each run is added either as-is or mirrored (left<->right), whichever crosses itself least
+  let seq = items[0].seq.slice(), melody = items[0].melody;
+  for (let k = 1; k < items.length; k++) {
+    const tail = items[k].seq.slice(1);               // drop that run's 'start'
+    const a = appendSeq(seq, tail), m = appendSeq(seq, mirrorSeq(tail));
+    const ca = clashPairs(buildFromSeq(a)), cm = clashPairs(buildFromSeq(m));
+    seq = cm < ca ? m : a;
+    melody = melody || items[k].melody;
+  }
+  return { seq, melody };
+}
 function savedRuns() { try { return JSON.parse(localStorage.getItem('marble.saved') || '[]'); } catch (_) { return []; } }
+let stitchMode = false, stitchSel = [];
+function updateStitchBar() {
+  const bar = $('stitchBar'); bar.style.display = stitchMode ? '' : 'none';
+  $('btnStitch').classList.toggle('on', stitchMode);
+  $('stitchInfo').textContent = stitchSel.length ? `${stitchSel.length} of ${STITCH_MAX} picked` : `Tap runs in the order you want them (up to ${STITCH_MAX})`;
+  $('stitchGo').disabled = stitchSel.length < 2;
+  $('stitchClear').style.visibility = stitchSel.length ? 'visible' : 'hidden';
+  document.querySelectorAll('#libGrid .lib').forEach((c, i) => {
+    const n = stitchSel.indexOf(i); c.classList.toggle('sel', stitchMode && n >= 0);
+    const badge = c.querySelector('.pick'); if (badge) badge.textContent = stitchMode && n >= 0 ? n + 1 : '';
+  });
+  $('mineHead').style.display = !stitchMode && savedRuns().length ? '' : 'none'; $('mineGrid').style.display = stitchMode ? 'none' : '';
+}
 function openLibrary() {
   const box = $('libGrid'); box.innerHTML = '';
-  for (const item of LIBRARY) {
+  LIBRARY.forEach((item, idx) => {
     const c = document.createElement('button');
     const bld = buildFromSeq(item.seq, item.melody);
-    c.className = 'lib'; c.innerHTML = `${thumb(bld)}<b>${item.name}</b><span>${item.blurb} · ${bld.pieces.length} pieces</span>`;
-    c.onclick = () => { loadBuild(buildFromSeq(item.seq, item.melody)); closeModals(); toast(`Loaded “${item.name}”. Press Drop marble!`); };
+    c.className = 'lib'; c.innerHTML = `<i class="pick"></i>${thumb(bld)}<b>${item.name}</b><span>${item.blurb} · ${bld.pieces.length} pieces</span>`;
+    c.onclick = () => {
+      if (stitchMode) {
+        const at = stitchSel.indexOf(idx);
+        if (at >= 0) stitchSel.splice(at, 1); else if (stitchSel.length < STITCH_MAX) stitchSel.push(idx); else toast(`You can stitch up to ${STITCH_MAX} runs.`);
+        updateStitchBar(); return;
+      }
+      loadBuild(buildFromSeq(item.seq, item.melody)); closeModals(); toast(`Loaded “${item.name}”. Press Drop marble!`);
+    };
     box.appendChild(c);
-  }
+  });
   const mine = $('mineGrid'); mine.innerHTML = '';
   const saved = savedRuns();
   $('mineHead').style.display = saved.length ? '' : 'none';
@@ -1296,7 +1352,7 @@ function openLibrary() {
     };
     mine.appendChild(c);
   });
-  $('libModal').classList.add('on');
+  $('libModal').classList.add('on'); updateStitchBar();
 }
 function thumbFromBuild(b) {
   const lay = computeAll(b);
@@ -1318,7 +1374,16 @@ const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&l
 function closeModals() { document.querySelectorAll('.modal').forEach((m) => m.classList.remove('on')); }
 document.querySelectorAll('[data-close]').forEach((b) => b.onclick = closeModals);
 document.querySelectorAll('.modal').forEach((m) => m.addEventListener('pointerdown', (e) => { if (e.target === m) closeModals(); }));
-$('btnLib').onclick = openLibrary;
+$('btnLib').onclick = () => { stitchMode = false; stitchSel = []; openLibrary(); };
+$('btnStitch').onclick = () => { stitchMode = !stitchMode; if (!stitchMode) stitchSel = []; updateStitchBar(); };
+$('stitchClear').onclick = () => { stitchSel = []; updateStitchBar(); };
+$('stitchGo').onclick = () => {
+  if (stitchSel.length < 2) return;
+  const items = stitchSel.map((i) => LIBRARY[i]), r = stitchItems(items), b = buildFromSeq(r.seq, r.melody);
+  const bad = clashPairs(b);
+  closeModals(); stitchMode = false; stitchSel = []; loadBuild(b);
+  setTimeout(() => toast(`Stitched ${items.length} runs into one: ${b.pieces.length} pieces.` + (bad ? ' A few pieces overlap – try a different order if marbles get stuck.' : ' Press Drop marble!')), 120);
+};
 $('btnSave').onclick = () => { $('saveName').value = ''; $('saveModal').classList.add('on'); setTimeout(() => $('saveName').focus(), 50); };
 $('saveGo').onclick = () => {
   const name = $('saveName').value.trim() || `My run ${savedRuns().length + 1}`;
@@ -1380,6 +1445,7 @@ async function boot() {
     trace(mi, step = 10) { const m = marbles[mi], o = []; for (let i = 0; i < m.n; i += step) o.push([i, ...[...m.data.slice(i * 7, i * 7 + 3)].map((v) => +v.toFixed(2))]); return o; },
     sim(n) { while (n-- > 0 && !finished && (marbles.length || spawnQueue.length)) stepFrame(); playhead = head; },
     pieces() { return [...layout.values()].map((L) => ({ id: L.id, t: L.type, e: [L.E.x, L.E.y, L.E.z].map((v) => +v.toFixed(2)), x: L.exits.map((q) => [q.pos.x, q.pos.y, q.pos.z].map((v) => +v.toFixed(2))) })); },
+    stitch(idx) { const items = idx.map((i) => LIBRARY[i]), r = stitchItems(items), b = buildFromSeq(r.seq, r.melody); loadBuild(b); return { pieces: b.pieces.length, clashes: clashPairs(b) }; },
     load(i) { loadBuild(buildFromSeq(LIBRARY[i].seq, LIBRARY[i].melody)); }, drop: dropMarbles, validateLibrary() {
       return LIBRARY.map((it) => {
         const full = buildFromSeq(it.seq, it.melody);

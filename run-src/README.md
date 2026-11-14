@@ -24,3 +24,6 @@ Tuned against a recording of a real plastic marble run with glass marbles.
 - Rolling: a continuous band of noise (about 1–4 kHz) that follows marble speed, with irregular roughness, plus faint track-seam taps.
 - A short, dark room reverb and a compressor tie it together.
 - The Mix panel (Hits / Rolling / Music) still controls levels and is saved on the device.
+
+## Stitch runs (v0.5)
+Library → "Stitch runs together": tap up to 6 runs in order and build one big run. Each run's start is dropped and its end is joined to the next run; a run is mirrored (left/right swapped) when that keeps the track from crossing itself. After a splitter the first branch carries on.
