@@ -10,7 +10,7 @@
   font-family:ui-rounded,"SF Pro Rounded","Nunito","Segoe UI",system-ui,sans-serif;color:var(--ink)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none}
-body{background:linear-gradient(180deg,#cfe3fb 0%,#eaf1fb 55%,#f5f1e8 100%)}
+body{color:var(--ink);background:linear-gradient(180deg,#cfe3fb 0%,#eaf1fb 55%,#f5f1e8 100%)}
 #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 .glass{background:var(--card);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);border:1px solid var(--line);box-shadow:0 6px 24px rgba(15,23,42,.10);border-radius:var(--r)}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
@@ -59,6 +59,7 @@ input[type=range]:disabled{opacity:.4}
 #swatches{display:flex;gap:5px}
 .sw{width:22px;height:22px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px rgba(15,23,42,.2)}
 .sw.on{box-shadow:0 0 0 3px var(--ink)}
+#swatches{flex-wrap:wrap;max-width:210px}
 #toast{position:fixed;left:50%;bottom:calc(160px + env(safe-area-inset-bottom));transform:translate(-50%,12px);background:var(--ink);color:#fff;padding:11px 18px;border-radius:14px;font-weight:650;font-size:14px;max-width:min(560px,calc(100vw - 32px));text-align:center;opacity:0;pointer-events:none;transition:.25s;z-index:20}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.35);display:none;align-items:center;justify-content:center;z-index:40;padding:16px}
@@ -84,6 +85,28 @@ input[type=range]:disabled{opacity:.4}
   #time{min-width:84px}
   .drop{height:46px;padding:0 14px}
 }
+#chips{position:fixed;top:calc(max(10px,env(safe-area-inset-top)) + 118px);left:50%;transform:translateX(-50%);max-width:min(860px,calc(100vw - 24px));padding:8px 10px;display:flex;gap:8px;align-items:center;overflow-x:auto;scrollbar-width:none;z-index:5}
+#chips::-webkit-scrollbar{display:none}
+.chipLab{font-size:12px;font-weight:800;color:var(--mut);white-space:nowrap;padding:0 4px}
+.chip{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:0;padding:4px 6px 5px;border-radius:12px;background:#fff;border:2px solid #bfdbfe;font-size:10.5px;font-weight:800;color:#334155;box-shadow:0 1px 3px rgba(15,23,42,.12)}
+.chip:active{transform:scale(.94)}.chip:hover{border-color:var(--blue)}
+body.night{--ink:#e8edff;--mut:#9aa6d4;--card:rgba(24,30,64,.82);--line:rgba(180,195,255,.14)}
+body.night .card,body.night .chip,body.night .b,body.night .drop.alt{background:#262d5c;color:#e8edff}
+body.night .card.sel{background:#34408a}
+body.night .spd{background:rgba(180,195,255,.12)}body.night .spd.on{background:#e8edff;color:#1a2150}
+body.night .t:hover{background:rgba(147,170,255,.18)}
+body.night .sheet{background:#161b3d;color:#e8edff}body.night .lib{background:#222a58;color:#e8edff}body.night .lib svg{background:#171c40}
+body.night .x{background:#2f3873;color:#fff}
+@media (pointer:coarse){
+  .b{width:56px;height:56px;font-size:20px}.b.big{width:72px;font-size:24px}
+  .spd{height:42px;padding:0 13px;font-size:14px}
+  input[type=range]{height:52px}
+  input[type=range]::-webkit-slider-runnable-track{height:16px;border-radius:9px}
+  input[type=range]::-webkit-slider-thumb{width:40px;height:40px;margin-top:-12px}
+  .t{min-width:48px;height:46px}
+  .sw{width:28px;height:28px}
+  .drop{height:56px;font-size:18px}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -101,11 +124,13 @@ input[type=range]:disabled{opacity:.4}
     <button class="t" id="btnRide" title="Ride along with the marble">🎥<span>Ride</span></button>
     <button class="t" id="btnSave">💾<span>Save</span></button>
     <button class="t" id="btnNew">＋<span>New</span></button>
+    <button class="t" id="btnTheme" aria-label="Scenery">🎨</button>
     <button class="t" id="btnSound" aria-label="Sound">🔊</button>
   </div>
 </div>
 
 <div id="hint" class="glass"><span id="hintText"></span><button id="hintBtn" style="display:none"></button></div>
+<div id="chips" class="glass" style="display:none"></div>
 <div id="stats"></div>
 <div id="tray" class="glass"></div>
 <div id="dragChip"></div>
