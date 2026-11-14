@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '0.2';
+const VERSION = '0.4';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -817,64 +817,99 @@ function tone(freq, dur, vol, type = 'sine', when = 0, partials = [[1, 1]], swee
   }
 }
 // ---- realistic marble sounds -------------------------------------------------------------
-// Impacts: a dry "tock" (short damped tone) plus a bright glassy tick, louder for harder hits.
-// Rolling: not a hiss – a stream of tiny, random micro-ticks whose rate follows the marble's speed, like glass on a hard track.
+// Sound model, tuned against a recording of a real plastic marble run with glass marbles:
+//  - Impact: a very short, rounded click (about 1.5-3 kHz) plus a soft body "thock" and a smooth little tail. No hard noise tick.
+//  - Rolling: a continuous, dense band of noise (about 0.7-3.5 kHz) that follows speed, with fine irregular roughness – not separate ticks.
+//  - A small room reverb ties it together so it sounds soothing rather than ticky.
 const mix = (() => { try { return Object.assign({ hit: 70, roll: 35, music: 100 }, JSON.parse(localStorage.getItem('marble.mix') || '{}')); } catch (_) { return { hit: 70, roll: 35, music: 100 }; } })();
-let tickBuf = null, masterOut = null;
+let masterOut = null, noiseBuf = null, roughBuf = null, rollBed = null;
 function audioOut() {
-  if (!masterOut) { const c = actx.createDynamicsCompressor(); c.threshold.value = -18; c.ratio.value = 6; c.connect(actx.destination); masterOut = c; }
-  return masterOut;
+  if (masterOut) return masterOut;
+  const bus = actx.createGain(), comp = actx.createDynamicsCompressor(), lp = actx.createBiquadFilter();
+  comp.threshold.value = -12; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
+  lp.type = 'lowpass'; lp.frequency.value = 11000; lp.Q.value = 0.5;
+  bus.connect(comp); comp.connect(lp); lp.connect(actx.destination);
+  // short, dark room: exponentially decaying noise, low-passed by averaging
+  const len = Math.floor(actx.sampleRate * 0.32), ir = actx.createBuffer(2, len, actx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); let z = 0; for (let i = 0; i < len; i++) { z += ((Math.random() * 2 - 1) - z) * 0.45; d[i] = z * Math.exp(-i / (len * 0.2)) * (i < 40 ? i / 40 : 1); } }
+  const conv = actx.createConvolver(), wet = actx.createGain(); conv.buffer = ir; wet.gain.value = 0.22;
+  bus.connect(conv); conv.connect(wet); wet.connect(comp);
+  masterOut = bus; return bus;
 }
-function tickBuffer() {
-  if (tickBuf) return tickBuf;
-  const n = Math.floor(actx.sampleRate * 0.012);
-  tickBuf = actx.createBuffer(1, n, actx.sampleRate);
-  const d = tickBuf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (n * 0.16));
-  return tickBuf;
+function noiseBuffer() {
+  if (noiseBuf) return noiseBuf;
+  const n = actx.sampleRate * 2; noiseBuf = actx.createBuffer(1, n, actx.sampleRate);
+  const d = noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return noiseBuf;
+}
+function roughBuffer() {
+  // smooth random 0..1 curve (about 40-80 Hz wiggle) used to make the rolling bed irregular like glass on a rough plastic track
+  if (roughBuf) return roughBuf;
+  const n = actx.sampleRate, d0 = new Float32Array(n); let z = 0, mx = 0.001;
+  for (let i = 0; i < n; i++) { z += ((Math.random() * 2 - 1) - z) * 0.12; d0[i] = z; }
+  for (let i = 0; i < n; i++) mx = Math.max(mx, Math.abs(d0[i]));
+  roughBuf = actx.createBuffer(1, n, actx.sampleRate);
+  const d = roughBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = d0[i] / mx * 0.5 + 0.5;
+  return roughBuf;
 }
 function marbleClick(vel, color) {
   if (!soundOn || mix.hit <= 0) return; ensureAudio(); if (!actx) return;
-  const t0 = actx.currentTime, out = audioOut(), vol = (0.04 + vel * 0.2) * (mix.hit / 70);
+  const t0 = actx.currentTime, out = audioOut(), vol = (0.05 + vel * 0.3) * (mix.hit / 70);
   const metal = color === 'chrome' || color === 'gold';
-  const base = (metal ? 2600 : 1500) * (0.85 + Math.random() * 0.3);
-  const parts = metal ? [[1, 1, 0.16], [2.76, 0.5, 0.1], [5.4, 0.25, 0.05]] : [[1, 1, 0.045], [2.3, 0.4, 0.025]];
+  const base = (metal ? 2400 : 1900) * (0.8 + Math.random() * 0.45) * (1 + vel * 0.12);
+  // body "thock" (the track itself) – low, soft, short
+  { const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(520 * (0.85 + Math.random() * 0.3), t0); o.frequency.exponentialRampToValueAtTime(330, t0 + 0.05);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(vol * 0.07, t0 + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+    o.connect(g).connect(out); o.start(t0); o.stop(t0 + 0.06); }
+  // glassy click: two close partials with a smooth tail
+  const parts = metal ? [[1, 1, 0.18], [2.76, 0.4, 0.1], [4.1, 0.2, 0.06]] : [[1, 1, 0.034], [1.47, 0.55, 0.045], [2.31, 0.3, 0.022]];
   for (const [mul, amp, dur] of parts) {
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.type = 'sine'; o.frequency.value = base * mul;
-    g.gain.setValueAtTime(vol * amp, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine'; o.frequency.value = base * mul;
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(vol * amp * 0.7, t0 + 0.0009); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     o.connect(g).connect(out); o.start(t0); o.stop(t0 + dur + 0.01);
   }
-  const n = actx.createBufferSource(), g = actx.createGain(), hp = actx.createBiquadFilter();
-  n.buffer = tickBuffer(); n.playbackRate.value = 0.8 + Math.random() * 0.5; hp.type = 'highpass'; hp.frequency.value = 2500;
-  g.gain.value = vol * 1.4;
-  n.connect(hp).connect(g).connect(out); n.start(t0);
+  // very short band-limited burst gives the click its "contact" without a harsh tick
+  const n = actx.createBufferSource(), g = actx.createGain(), bp = actx.createBiquadFilter();
+  n.buffer = noiseBuffer(); bp.type = 'bandpass'; bp.frequency.value = base * 2.2; bp.Q.value = 0.45;
+  g.gain.setValueAtTime(vol * 1.5, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.0065);
+  n.connect(bp).connect(g).connect(out); n.start(t0, Math.random() * 1.5); n.stop(t0 + 0.01);
 }
-let rollPrev = new Map(), rollCarry = 0;
+function ensureRollBed() {
+  if (rollBed) return rollBed;
+  const out = audioOut(), src = actx.createBufferSource(), bp = actx.createBiquadFilter(), lp = actx.createBiquadFilter(), g = actx.createGain(), mod = actx.createGain();
+  src.buffer = noiseBuffer(); src.loop = true; bp.type = 'bandpass'; bp.Q.value = 0.9; lp.type = 'lowpass'; lp.frequency.value = 7500; lp.Q.value = 0.5;
+  const rs = actx.createBufferSource(), rg = actx.createGain(); rs.buffer = roughBuffer(); rs.loop = true; rg.gain.value = 0.55; mod.gain.value = 0.45;
+  rs.connect(rg); rg.connect(mod.gain);   // mod gain = 0.45 + 0.55*rough(0..1)
+  g.gain.value = 0;
+  const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 520; hp.Q.value = 0.6;
+  src.connect(hp); hp.connect(bp); bp.connect(lp); lp.connect(mod); mod.connect(g); g.connect(out);
+  src.start(); rs.start();
+  rollBed = { g, bp, rs }; return rollBed;
+}
+function setRoll(level, speedN) {
+  const b = ensureRollBed(), t = actx.currentTime;
+  b.g.gain.setTargetAtTime(level, t, 0.05);
+  b.bp.frequency.setTargetAtTime(1100 + speedN * 1700, t, 0.06);
+  b.rs.playbackRate.setTargetAtTime(0.7 + speedN * 1.3, t, 0.06);
+}
+let rollPrev = new Map(), seamCarry = 0;
 function updateRoll(dt) {
-  if (!soundOn || !actx || actx.state !== 'running' || mix.roll <= 0 || dir === 0) { rollPrev.clear(); return; }
-  let rate = 0, loud = 0;
+  if (!soundOn || !actx || actx.state !== 'running' || mix.roll <= 0 || dir === 0) { rollPrev.clear(); if (rollBed) setRoll(0, 0); return; }
+  let loud = 0, cnt = 0;
   for (const m of marbles) {
     if (!m.mesh.visible) continue;
     const p = m.mesh.position, q = rollPrev.get(m);
     if (q && dt > 0) {
       const sp = Math.hypot(p.x - q.x, p.z - q.z) / dt, fall = Math.abs(p.y - q.y) / dt;
-      if (sp > 0.3 && fall < sp * 1.1 + 0.4 && p.y > 0.4) { const s = Math.min(sp, 7); rate += s * 22; loud = Math.max(loud, s / 7); }
+      if (sp > 0.3 && fall < sp * 1.1 + 0.4 && p.y > 0.4) { loud = Math.max(loud, Math.min(sp, 7) / 7); cnt++; }
     }
     rollPrev.set(m, p.clone());
   }
-  rollCarry += Math.min(rate, 260) * dt * Math.max(0.25, speed);
-  const out = audioOut(), t0 = actx.currentTime;
-  let n = 0;
-  while (rollCarry >= 1 && n++ < 8) {
-    rollCarry -= 1;
-    const s = actx.createBufferSource(), g = actx.createGain(), bp = actx.createBiquadFilter();
-    s.buffer = tickBuffer(); s.playbackRate.value = 0.7 + Math.random() * 1.1;
-    bp.type = 'bandpass'; bp.frequency.value = 1400 + Math.random() * 2600 + loud * 800; bp.Q.value = 1.2;
-    g.gain.value = (0.012 + loud * 0.03) * (0.4 + Math.random() * 0.9) * (mix.roll / 35);
-    s.connect(bp).connect(g).connect(out); s.start(t0 + Math.random() * dt);
-  }
-  rollCarry = Math.min(rollCarry, 2);
+  const sp = loud * Math.max(0.35, Math.min(1.4, speed));
+  setRoll(cnt ? (0.012 + Math.pow(loud, 1.3) * 0.075 * (1 + Math.min(cnt, 4) * 0.12)) * (mix.roll / 35) : 0, Math.min(1, sp));
+  // faint seams/ridges in the track: soft, irregular little taps while a marble rolls
+  seamCarry += cnt ? (1.5 + loud * 7) * dt * Math.max(0.35, speed) : 0;
+  if (seamCarry >= 1) { seamCarry = Math.random() * 0.6; marbleClick(0.05 + loud * 0.1, 'glass'); }
 }
 function playEvent(ev) {
   if (ev.kind === 'hit') { marbleClick(ev.v, ev.c); return; }
