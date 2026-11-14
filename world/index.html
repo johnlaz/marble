@@ -203,6 +203,19 @@
       header #speed-label { display: none !important; }
       header .btn-tactile span { font-size: 15px !important; }
     }
+    /* kid-friendly phone layout: piece palette as a bottom strip you swipe sideways */
+    @media (orientation: portrait) {
+      #builder-dock { top: auto !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: auto !important; display: block !important; padding: 0.3rem 0.5rem max(0.5rem, env(safe-area-inset-bottom)) !important; }
+      #builder-dock-inner { flex-direction: column !important; width: 100% !important; max-width: 40rem; margin: 0 auto; padding: 0.4rem !important; max-height: none !important; }
+      #piece-palette { flex-direction: row !important; flex-wrap: nowrap !important; overflow-x: auto !important; overflow-y: hidden !important; max-height: none !important; width: 100% !important; align-items: center !important; justify-content: flex-start !important; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+      #piece-palette > * { flex-shrink: 0 !important; }
+      #builder-actions { flex-direction: row !important; width: 100% !important; border-top: 2px solid #f1f5f9; padding-top: 0.35rem; justify-content: space-between; }
+      #btn-snap-piece { width: auto !important; flex: 1 1 auto; font-size: 0.9rem !important; }
+      #btn-undo-piece, #btn-clear-track { width: auto !important; }
+    }
+    @media (max-width: 480px) {
+      #toggle-scrubber-label { display: none !important; }
+    }
     /* ride along: hide everything that is not needed for watching */
     body.riding #builder-dock, body.riding #btn-presets, body.riding #btn-marble-style, body.riding #btn-theme-toggle, body.riding #btn-drop-multi, body.riding #toast-banner { display: none !important; }
   </style>
@@ -313,7 +326,7 @@
 
           <button id="btn-clear-marbles" title="Back to Track Builder" class="btn-tactile h-11 sm:h-12 px-3 sm:px-4 shrink-0 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs sm:text-sm flex items-center gap-1 border-2 border-slate-300">
             <span>🧱</span>
-            <span>Edit Track</span>
+            <span>Edit<span class="hidden sm:inline"> Track</span></span>
           </button>
         </div>
       </div>
@@ -2223,6 +2236,73 @@
         });
       }
 
+      // ---- Auto-fit: if a new piece would run into the track, quietly add a ramp or turn first so it fits ----
+      const FIT_FILLERS = ['ramp', 'turnLeft', 'turnRight', 'uTurn'];
+      function fitNodeConflict(node, others, skip) {
+        const d = TRACK_DEFS[node.type];
+        if (!d || !d.getLocalPoint) return false;
+        const up = new THREE.Vector3(0, 1, 0);
+        const pts = [0.45, 0.85, 1.0].map(u => d.getLocalPoint(u, 0, 0).applyAxisAngle(up, node.yaw).add(node.pos));
+        for (let i = 0; i < others.length; i++) {
+          if (skip.has(i)) continue;
+          const o = others[i], od = TRACK_DEFS[o.type];
+          if (!od || !od.getLocalPoint) continue;
+          for (const ou of [0.25, 0.65]) {
+            const op = od.getLocalPoint(ou, 0, 0).applyAxisAngle(up, o.yaw).add(o.pos);
+            for (const sp of pts) if (sp.distanceTo(op) < 1.65) return true;
+          }
+        }
+        return false;
+      }
+      function chainConflicts(socket, types) {
+        const up = new THREE.Vector3(0, 1, 0);
+        let pos = socket.pos.clone(), yaw = socket.yaw;
+        const placed = [], base = trackNodes.length;
+        for (let k = 0; k < types.length; k++) {
+          const def = TRACK_DEFS[types[k]];
+          if (!def) return true;
+          const node = { type: types[k], pos: pos.clone(), yaw };
+          const skip = new Set([socket.parentIndex]);
+          if (k > 0) skip.add(base + k - 1);
+          if (fitNodeConflict(node, trackNodes.concat(placed), skip)) return true;
+          placed.push(node);
+          if (def.exitPos) { pos = pos.clone().add(def.exitPos.clone().applyAxisAngle(up, yaw)); yaw += def.exitYaw || 0; }
+          else if (k < types.length - 1) return true;
+        }
+        return false;
+      }
+      function findFittingChain(socket, type) {
+        if (!chainConflicts(socket, [type])) return [type];
+        const tries = [];
+        FIT_FILLERS.forEach(a => tries.push([a]));
+        FIT_FILLERS.forEach(a => FIT_FILLERS.forEach(b => tries.push([a, b])));
+        FIT_FILLERS.forEach(a => FIT_FILLERS.forEach(b => FIT_FILLERS.forEach(c => tries.push([a, b, c]))));
+        for (const f of tries) { const chain = f.concat([type]); if (!chainConflicts(socket, chain)) return chain; }
+        return null;
+      }
+      function placeChain(socket, chain) {
+        const up = new THREE.Vector3(0, 1, 0);
+        let pos = socket.pos.clone(), yaw = socket.yaw;
+        const nodes = [];
+        chain.forEach(t => {
+          const d = TRACK_DEFS[t];
+          nodes.push({ type: t, pos: pos.clone(), yaw });
+          if (d.exitPos) { pos.add(d.exitPos.clone().applyAxisAngle(up, yaw)); yaw += d.exitYaw || 0; }
+        });
+        const last = nodes[nodes.length - 1], ld = TRACK_DEFS[last.type];
+        const exitY = ld.exitPos ? last.pos.y + ld.exitPos.clone().applyAxisAngle(up, last.yaw).y : last.pos.y - 0.5;
+        const lift = autoLiftTowerIfNeeded(exitY);
+        let parent = socket.parentIndex, br = socket.branch || 0;
+        nodes.forEach(n => {
+          trackNodes.push({ type: n.type, pos: new THREE.Vector3(n.pos.x, n.pos.y + lift, n.pos.z), yaw: n.yaw, parentIndex: parent, branch: br });
+          parent = trackNodes.length - 1; br = 0;
+        });
+        targetedSocket = null;
+        rebuildVisualTrackAndPins();
+        sound.playSnapClick();
+        showToast(`🧩 Added ${chain.slice(0, -1).map(t => TRACK_DEFS[t].name).join(' + ')} so it fits!`);
+      }
+
       function snapNewPiece(pieceType = selectedPieceType) {
         sound.unlock();
         if (simState !== 'build') {
@@ -2295,6 +2375,9 @@
           showToast(`✨ Inserted ${def.name} into the run!`);
           return;
         }
+
+        const fitChain = findFittingChain(socket, pieceType);
+        if (fitChain && fitChain.length > 1) { placeChain(socket, fitChain); return; }
 
         const startPos = socket.pos.clone();
         const startYaw = socket.yaw;
@@ -3123,9 +3206,52 @@
       const presetsModal = document.getElementById('presets-modal');
       const presetsGrid = document.getElementById('presets-grid');
 
+      // ---- My builds (saved on this device) + version / contact ----
+      const WORLD_VERSION = '1.1';
+      const SAVE_KEY = 'marbleworld.saved';
+      const savedBuilds = () => { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); } catch (_) { return []; } };
+      function saveCurrentBuild() {
+        const list = savedBuilds();
+        const name = `My build ${list.length + 1}`;
+        list.unshift({
+          name, ts: Date.now(), melody: currentPresetMelody || null,
+          nodes: trackNodes.map(n => ({ type: n.type, p: [n.pos.x, n.pos.y, n.pos.z], yaw: n.yaw, parent: n.parentIndex, branch: n.branch || 0 }))
+        });
+        try { localStorage.setItem(SAVE_KEY, JSON.stringify(list.slice(0, 30))); showToast(`💾 Saved as "${name}"!`); }
+        catch (_) { showToast('Could not save on this device.'); }
+        renderPresetsModal();
+      }
+      function loadSavedBuild(i) {
+        const b = savedBuilds()[i];
+        if (!b || !b.nodes || !b.nodes.length) return;
+        const nodes = b.nodes.filter(n => TRACK_DEFS[n.type]);
+        if (nodes.length !== b.nodes.length) { showToast('That build uses pieces this version does not have.'); return; }
+        clearMarbles();
+        hideMergeFixPopup();
+        trackNodes = nodes.map(n => ({ type: n.type, pos: new THREE.Vector3(n.p[0], n.p[1], n.p[2]), yaw: n.yaw, parentIndex: n.parent, branch: n.branch || 0 }));
+        currentPresetMelody = b.melody || null;
+        melodyNoteCursor = 0;
+        targetedSocket = null;
+        camTarget.set(0, 6.8, 0);
+        updateOrbitCamera();
+        rebuildVisualTrackAndPins();
+        showToast(`📂 Loaded "${b.name}"!`);
+      }
+      function deleteSavedBuild(i) {
+        const list = savedBuilds(); list.splice(i, 1);
+        localStorage.setItem(SAVE_KEY, JSON.stringify(list));
+        renderPresetsModal();
+      }
+
       function renderPresetsModal() {
         if (!presetsGrid) return;
         presetsGrid.innerHTML = '';
+        const full = (el) => { el.style.gridColumn = '1 / -1'; return el; };
+        const saveBtn = full(document.createElement('button'));
+        saveBtn.className = 'btn-tactile p-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-sm sm:text-base border-2 border-emerald-200';
+        saveBtn.textContent = '💾 Save my build';
+        saveBtn.addEventListener('click', saveCurrentBuild);
+        presetsGrid.appendChild(saveBtn);
         PRESET_BUILDS.forEach(preset => {
           const card = document.createElement('button');
           card.className = 'btn-tactile text-left p-4 rounded-2xl bg-sky-50 hover:bg-sky-100 border-2 border-sky-200 flex flex-col justify-between gap-2';
@@ -3142,6 +3268,26 @@
           });
           presetsGrid.appendChild(card);
         });
+        const mine = savedBuilds();
+        if (mine.length) {
+          const h = full(document.createElement('div'));
+          h.style.cssText += 'font-weight:900;color:#475569;margin-top:6px;font-size:15px';
+          h.textContent = '⭐ My builds';
+          presetsGrid.appendChild(h);
+          mine.forEach((b, i) => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border-2 border-amber-200';
+            row.innerHTML = `<button class="btn-tactile flex-1 text-left font-black text-slate-800" style="min-width:0">${b.name}<span style="display:block;font-size:12px;font-weight:700;color:#64748b">${b.nodes.length} pieces</span></button><button aria-label="Delete" class="btn-tactile w-10 h-10 rounded-xl bg-rose-100 text-rose-700 font-black">🗑</button>`;
+            const [openBtn, delBtn] = row.querySelectorAll('button');
+            openBtn.addEventListener('click', () => { presetsModal.classList.add('hidden'); loadSavedBuild(i); });
+            delBtn.addEventListener('click', () => deleteSavedBuild(i));
+            presetsGrid.appendChild(row);
+          });
+        }
+        const foot = full(document.createElement('div'));
+        foot.style.cssText += 'text-align:center;font-size:12px;font-weight:700;color:#94a3b8;margin-top:8px';
+        foot.innerHTML = `Marble World 3D v${WORLD_VERSION} · &copy; 2026 LAZLAB Creations · <a href="mailto:lazlab.io@gmail.com?subject=Marble%20World%203D" style="color:#2563eb;text-decoration:none">Send a note</a>`;
+        presetsGrid.appendChild(foot);
       }
 
       document.getElementById('btn-presets').addEventListener('click', () => {
