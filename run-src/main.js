@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '1.1';
+const VERSION = '1.2';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -1329,7 +1329,7 @@ function updateStitchBar() {
   $('mineHead').style.display = !stitchMode && savedRuns().length ? '' : 'none'; $('mineGrid').style.display = stitchMode ? 'none' : '';
 }
 function openLibrary() {
-  const box = $('libGrid'); box.innerHTML = '';
+  const box = $('libGrid'); box.innerHTML = ''; if ($('bkInfo')) bkInfo();
   LIBRARY.forEach((item, idx) => {
     const c = document.createElement('button');
     const bld = buildFromSeq(item.seq, item.melody);
@@ -1411,12 +1411,40 @@ function stitchGo() {
   setTimeout(() => toast(`Stitched ${items.length} runs into one: ${b.pieces.length} pieces.` + (bad ? ' A few pieces overlap – try a different order if marbles get stuck.' : ' Press Drop marble!')), 120);
 }
 $('stitchGo').onclick = stitchGo;
+/* ---- backup / restore (saved runs live only in this browser, so a file copy is the safe way to keep them) ---- */
+try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+function bkInfo() {
+  const n = savedRuns().length, t = +localStorage.getItem('marble.lastBackup') || 0;
+  $('bkInfo').textContent = `${n} saved run${n === 1 ? '' : 's'} · ` + (t ? 'last backup ' + new Date(t).toLocaleDateString() : 'not backed up yet');
+}
+$('btnBackup').onclick = async () => {
+  const data = JSON.stringify({ app: 'marble-run', version: 1, saved: savedRuns(), when: new Date().toISOString() });
+  const file = new File([data], 'marble-run-backup.json', { type: 'application/json' });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: 'Marble Run backup' });
+    else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+    localStorage.setItem('marble.lastBackup', Date.now()); bkInfo(); toast('Backup ready. Keep the file somewhere safe.');
+  } catch (e) { if (e && e.name !== 'AbortError') toast('Could not make the backup.'); }
+};
+$('btnRestore').onclick = () => $('fileRestore').click();
+$('fileRestore').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!d || d.app !== 'marble-run' || !Array.isArray(d.saved)) throw new Error('bad');
+    const have = savedRuns(), seen = new Set(have.map((x) => x.name + JSON.stringify(x.build)));
+    let added = 0;
+    for (const r of d.saved) { if (r && r.build && Array.isArray(r.build.pieces) && !seen.has(String(r.name) + JSON.stringify(r.build))) { have.push({ name: String(r.name || 'Restored run').slice(0, 60), build: r.build }); seen.add(String(r.name) + JSON.stringify(r.build)); added++; } }
+    localStorage.setItem('marble.saved', JSON.stringify(have.slice(0, 200))); openLibrary(); bkInfo();
+    toast(added ? `Restored ${added} run${added === 1 ? '' : 's'}.` : 'Everything in that file is already here.');
+  } catch (err) { toast('That is not a Marble Run backup file.'); }
+};
 $('btnSave').onclick = () => { $('saveName').value = ''; $('saveModal').classList.add('on'); setTimeout(() => $('saveName').focus(), 50); };
 $('saveGo').onclick = () => {
   const name = $('saveName').value.trim() || `My run ${savedRuns().length + 1}`;
   const a = savedRuns(); a.unshift({ name, build: JSON.parse(JSON.stringify(build)) });
-  localStorage.setItem('marble.saved', JSON.stringify(a.slice(0, 40)));
-  closeModals(); toast(`Saved “${name}” in the Library.`);
+  localStorage.setItem('marble.saved', JSON.stringify(a.slice(0, 200)));
+  closeModals(); toast(`Saved “${name}” in the Library.` + (a.length % 5 === 0 ? ' Tip: Library → Back up keeps a copy.' : ''));
 };
 $('saveName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('saveGo').click(); });
 

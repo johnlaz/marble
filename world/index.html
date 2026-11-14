@@ -3207,7 +3207,7 @@
       const presetsGrid = document.getElementById('presets-grid');
 
       // ---- My builds (saved on this device) + version / contact ----
-      const WORLD_VERSION = '1.2';
+      const WORLD_VERSION = '1.3';
       const SAVE_KEY = 'marbleworld.saved';
       const savedBuilds = () => { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); } catch (_) { return []; } };
       function saveCurrentBuild() {
@@ -3217,7 +3217,7 @@
           name, ts: Date.now(), melody: currentPresetMelody || null,
           nodes: trackNodes.map(n => ({ type: n.type, p: [n.pos.x, n.pos.y, n.pos.z], yaw: n.yaw, parent: n.parentIndex, branch: n.branch || 0 }))
         });
-        try { localStorage.setItem(SAVE_KEY, JSON.stringify(list.slice(0, 30))); showToast(`💾 Saved as "${name}"!`); }
+        try { localStorage.setItem(SAVE_KEY, JSON.stringify(list.slice(0, 200))); showToast(`💾 Saved as "${name}"!` + (list.length % 5 === 0 ? ' Tip: Builds menu → Back up keeps a copy.' : '')); }
         catch (_) { showToast('Could not save on this device.'); }
         renderPresetsModal();
       }
@@ -3243,6 +3243,34 @@
         renderPresetsModal();
       }
 
+      // ---- Backup / restore (builds live only in this browser, so a file copy is the safe way to keep them) ----
+      try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (_) {}
+      async function backupBuilds() {
+        const data = JSON.stringify({ app: 'marble-world', version: 1, saved: savedBuilds(), when: new Date().toISOString() });
+        const file = new File([data], 'marble-world-backup.json', { type: 'application/json' });
+        try {
+          if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: 'Marble World backup' });
+          else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+          localStorage.setItem('marbleworld.lastBackup', Date.now()); renderPresetsModal(); showToast('Backup ready. Keep the file somewhere safe.');
+        } catch (e) { if (e && e.name !== 'AbortError') showToast('Could not make the backup.'); }
+      }
+      async function restoreBuilds(file) {
+        try {
+          const d = JSON.parse(await file.text());
+          if (!d || d.app !== 'marble-world' || !Array.isArray(d.saved)) throw new Error('bad');
+          const have = savedBuilds(), seen = new Set(have.map(x => x.name + JSON.stringify(x.nodes)));
+          let added = 0;
+          for (const b of d.saved) {
+            if (!b || !Array.isArray(b.nodes) || !b.nodes.length) continue;
+            const key = String(b.name) + JSON.stringify(b.nodes);
+            if (seen.has(key)) continue;
+            have.push({ name: String(b.name || 'Restored build').slice(0, 60), ts: b.ts || Date.now(), melody: b.melody || null, nodes: b.nodes }); seen.add(key); added++;
+          }
+          localStorage.setItem(SAVE_KEY, JSON.stringify(have.slice(0, 200)));
+          renderPresetsModal();
+          showToast(added ? `Restored ${added} build${added === 1 ? '' : 's'}.` : 'Everything in that file is already here.');
+        } catch (_) { showToast('That is not a Marble World backup file.'); }
+      }
       function renderPresetsModal() {
         if (!presetsGrid) return;
         presetsGrid.innerHTML = '';
@@ -3284,6 +3312,14 @@
             presetsGrid.appendChild(row);
           });
         }
+        const bk = full(document.createElement('div'));
+        const lastBk = +localStorage.getItem('marbleworld.lastBackup') || 0;
+        bk.style.cssText += 'margin-top:10px;padding:12px;border-radius:16px;background:#f1f5f9;text-align:center';
+        bk.innerHTML = `<div style="font-weight:900;color:#334155;margin-bottom:8px">💾 Keep my builds safe</div><button id="bk-back" class="btn-tactile" style="margin:2px 4px;padding:10px 14px;border-radius:12px;background:#2563eb;color:#fff;font-weight:900">⬇ Back up</button><button id="bk-rest" class="btn-tactile" style="margin:2px 4px;padding:10px 14px;border-radius:12px;background:#e2e8f0;color:#334155;font-weight:900">⬆ Restore</button><input type="file" id="bk-file" accept=".json,application/json" style="display:none"><div style="font-size:12px;font-weight:700;color:#64748b;margin-top:6px">${mine.length} saved build${mine.length === 1 ? '' : 's'} · ${lastBk ? 'last backup ' + new Date(lastBk).toLocaleDateString() : 'not backed up yet'}</div>`;
+        presetsGrid.appendChild(bk);
+        bk.querySelector('#bk-back').addEventListener('click', backupBuilds);
+        bk.querySelector('#bk-rest').addEventListener('click', () => bk.querySelector('#bk-file').click());
+        bk.querySelector('#bk-file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) restoreBuilds(f); });
         const foot = full(document.createElement('div'));
         foot.style.cssText += 'text-align:center;font-size:12px;font-weight:700;color:#94a3b8;margin-top:8px';
         foot.innerHTML = `Marble World 3D v${WORLD_VERSION} · &copy; 2026 LAZLAB Creations · <a href="mailto:lazlab.io@gmail.com?subject=Marble%20World%203D" style="color:#2563eb;text-decoration:none">Send a note</a><br><a href="../" style="display:inline-block;margin-top:8px;padding:8px 16px;border-radius:12px;background:#e2e8f0;color:#334155;font-weight:900;font-size:14px;text-decoration:none">🏠 Marble home</a>`;
