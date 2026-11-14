@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '0.6';
+const VERSION = '0.7';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -1380,13 +1380,24 @@ document.querySelectorAll('.modal').forEach((m) => m.addEventListener('pointerdo
 $('btnLib').onclick = () => { stitchMode = false; stitchSel = []; openLibrary(); };
 $('btnStitch').onclick = () => { stitchMode = !stitchMode; if (!stitchMode) stitchSel = []; updateStitchBar(); };
 $('stitchClear').onclick = () => { stitchSel = []; updateStitchBar(); };
-$('stitchGo').onclick = () => {
+$('stitchRandom').onclick = () => {
+  const n = 5 + Math.floor(Math.random() * 2), ids = LIBRARY.map((_, i) => i);
+  let best = null, bestBad = 1e9;
+  for (let t = 0; t < 12; t++) {
+    for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+    const pick = ids.slice(0, Math.min(n, ids.length)), r = stitchItems(pick.map((i) => LIBRARY[i])), bad = clashPairs(buildFromSeq(r.seq, r.melody)) || 0;
+    if (bad < bestBad) { bestBad = bad; best = pick.slice(); if (!bad) break; }
+  }
+  stitchSel = best; stitchGo();
+};
+function stitchGo() {
   if (stitchSel.length < 2) return;
   const items = stitchSel.map((i) => LIBRARY[i]), r = stitchItems(items), b = buildFromSeq(r.seq, r.melody);
   const bad = clashPairs(b);
   closeModals(); stitchMode = false; stitchSel = []; loadBuild(b);
   setTimeout(() => toast(`Stitched ${items.length} runs into one: ${b.pieces.length} pieces.` + (bad ? ' A few pieces overlap – try a different order if marbles get stuck.' : ' Press Drop marble!')), 120);
-};
+}
+$('stitchGo').onclick = stitchGo;
 $('btnSave').onclick = () => { $('saveName').value = ''; $('saveModal').classList.add('on'); setTimeout(() => $('saveName').focus(), 50); };
 $('saveGo').onclick = () => {
   const name = $('saveName').value.trim() || `My run ${savedRuns().length + 1}`;
