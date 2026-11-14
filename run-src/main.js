@@ -707,7 +707,7 @@ function stepFrame() {
     if (m.pv) {
       const dv = Math.hypot(v.x - m.pv[0], v.y - m.pv[1], v.z - m.pv[2]);
       // a sudden change in velocity = the marble clicked against something (gravity alone changes it by ~0.17 per frame)
-      if (dv > 0.9 && head - (m.lastHit || -99) > 6) { m.lastHit = head; events.push({ f: head, kind: 'hit', v: Math.min(1, (dv - 0.9) / 3.5) }); }
+
     }
     m.pv = [v.x, v.y, v.z];
     if (sp2 > 0.01) moving = true;
@@ -864,11 +864,9 @@ function updateRoll(dt) {
   roll.bp.frequency.setTargetAtTime(260 + k * 900, t, 0.08);
 }
 function playEvent(ev) {
-  if (ev.kind === 'hit') { marbleClick(ev.v); return; }
   if (ev.kind === 'note') { if (ev.freq) tone(ev.freq, 0.7, 0.16, 'sine', 0, [[1, 1], [2.01, 0.28], [4.1, 0.08]]); }
   else if (ev.kind === 'bell') tone(660, 1.6, 0.11, 'sine', 0, [[1, 1], [2.76, 0.45], [5.4, 0.25], [8.9, 0.1]]);
-  else if (ev.kind === 'goal') { marbleClick(0.5); marbleClick(0.3); setTimeout(() => marbleClick(0.2), 90); }
-  else if (ev.kind === 'portal') tone(300, 0.35, 0.04, 'sine', 0, [[1, 1]], 900);
+  else if (ev.kind === 'portal') blip(700, 0.12, 0.05);
 }
 function playEventsBetween(a, b) {
   // events are stored in frame order
@@ -1176,6 +1174,7 @@ function swatches() {
     box.appendChild(s);
   });
 }
+$('spdCycle').onclick = () => { const order = [1, 2, 0.5, 0.25]; speed = order[(order.indexOf(speed) + 1) % 4]; $('spdCycle').textContent = speed === 0.25 ? '¼×' : speed === 0.5 ? '½×' : speed + '×'; document.querySelectorAll('.spd[data-s]').forEach((x) => x.classList.toggle('on', +x.dataset.s === speed)); };
 function fmt(f) { const s = f / 60; return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`; }
 function updateTransport() {
   const has = marbles.length > 0;
@@ -1290,7 +1289,6 @@ function frame() {
       if (playhead > head) { playhead = head; if (finished || !marbles.length) dir = 0; }
     }
   }
-  updateRoll(dt);
   const nf = Math.floor(playhead);
   if (dir > 0 && nf > soundF && nf - soundF < 40) playEventsBetween(soundF, nf);
   soundF = nf;

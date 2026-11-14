@@ -52,6 +52,7 @@ input[type=range]:disabled{opacity:.4}
 .b.big:disabled{background:#94a3b8}
 .spd{height:34px;padding:0 10px;border-radius:10px;font-weight:800;font-size:12.5px;background:rgba(15,23,42,.06)}
 .spd.on{background:var(--ink);color:#fff}
+.spc{display:none}
 .sep{flex:1}
 #drop{display:flex;gap:8px;align-items:center}
 .drop{height:50px;padding:0 20px;border-radius:16px;background:var(--acc);color:#fff;font-weight:800;font-size:16px;box-shadow:0 4px 14px rgba(255,90,54,.4);display:flex;align-items:center;gap:8px}
@@ -95,10 +96,12 @@ input[type=range]:disabled{opacity:.4}
   .b{width:42px;height:44px}.b.big{width:54px}
   .spd{height:34px;min-width:34px;padding:0 5px;font-size:12px}
   .sep{display:none}
+  .spd:not(.spc){display:none}.spc{display:flex;align-items:center;justify-content:center;min-width:46px;height:44px;background:var(--ink);color:#fff;font-size:14px;border-radius:12px}
+  #drop{display:contents}
+  #btnDrop5{order:5}#btnDrop{order:6;flex:1}#btnReset{order:2}.ctl{order:1}.spc{order:2}#btnReset{order:3}#swatches{order:4}
   #swatches{flex:1 1 130px;flex-wrap:nowrap;overflow-x:auto;max-width:none;min-width:0;padding:4px 2px;scrollbar-width:none}
   .sw{width:26px;height:26px;flex:0 0 auto}
-  #drop{flex:0 0 auto}
-  .drop{height:46px;padding:0 14px;font-size:15px}
+  .drop{height:46px;padding:0 10px;font-size:15px;white-space:nowrap}
   .drop.alt{padding:0 10px}
   .b#btnReset{width:42px}
   #info{max-width:calc(100vw - 16px)}
@@ -117,6 +120,14 @@ body.night .spd{background:rgba(180,195,255,.12)}body.night .spd.on{background:#
 body.night .t:hover{background:rgba(147,170,255,.18)}
 body.night .sheet{background:#161b3d;color:#e8edff}body.night .lib{background:#222a58;color:#e8edff}body.night .lib svg{background:#171c40}
 body.night .x{background:#2f3873;color:#fff}
+@media (orientation:landscape) and (max-height:520px){
+  #tray{top:calc(var(--top-h,56px) + max(10px,env(safe-area-inset-top)) + 8px);bottom:8px;left:8px;right:auto;width:84px;height:auto;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+  .card{width:auto}
+  #bar{left:auto;right:8px;top:calc(var(--top-h,56px) + max(10px,env(safe-area-inset-top)) + 8px);bottom:8px;width:300px;overflow-y:auto;justify-content:flex-start;gap:6px}
+  #toast{bottom:16px}
+  .tools{max-width:calc(100vw - 80px)}
+  #info{left:calc(50% - 6px);max-width:calc(100vw - 440px)}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -161,6 +172,7 @@ body.night .x{background:#2f3873;color:#fff}
     <div class="ctl">
       <button class="spd" data-s="0.25">¼×</button><button class="spd" data-s="0.5">½×</button><button class="spd on" data-s="1">1×</button><button class="spd" data-s="2">2×</button>
     </div>
+    <button class="spd spc" id="spdCycle" aria-label="Playback speed">1×</button>
     <div class="sep"></div>
     <div id="swatches"></div>
     <div id="drop">
