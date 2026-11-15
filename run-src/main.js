@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '1.6';
+const VERSION = '1.7';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -1405,6 +1405,16 @@ function stitchItems(items) {
   }
   return { seq, melody };
 }
+function askConfirm(title, body, okLabel, onOk) {
+  const o = document.createElement('div');
+  o.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:20px';
+  o.innerHTML = `<div style="background:#fff;color:#0f172a;border-radius:20px;padding:20px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:inherit"><div style="font-weight:800;font-size:18px;margin-bottom:6px"></div><div style="font-size:14px;opacity:.75;margin-bottom:16px"></div><div style="display:flex;gap:10px"><button style="flex:1;padding:13px;border-radius:12px;background:#e2e8f0;font-weight:800;font-size:15px">Keep it</button><button style="flex:1;padding:13px;border-radius:12px;background:#ef4444;color:#fff;font-weight:800;font-size:15px"></button></div></div>`;
+  const d = o.firstChild.children; d[0].textContent = title; d[1].textContent = body;
+  const b = d[2].children; b[1].textContent = okLabel;
+  b[0].onclick = () => o.remove(); b[1].onclick = () => { o.remove(); onOk(); };
+  o.onclick = (e) => { if (e.target === o) o.remove(); };
+  document.body.appendChild(o);
+}
 function savedRuns() { try { return JSON.parse(localStorage.getItem('marble.saved') || '[]'); } catch (_) { return []; } }
 let stitchMode = false, stitchSel = [];
 function updateStitchBar() {
@@ -1442,7 +1452,7 @@ function openLibrary() {
     const c = document.createElement('div'); c.className = 'lib mine';
     c.innerHTML = `${thumbFromBuild(s.build)}<b>${escapeHtml(s.name)}</b><span>${s.build.pieces.length} pieces</span><i class="del" title="Delete">✕</i>`;
     c.onclick = (e) => {
-      if (e.target.classList.contains('del')) { const a = savedRuns(); a.splice(i, 1); localStorage.setItem('marble.saved', JSON.stringify(a)); openLibrary(); return; }
+      if (e.target.classList.contains('del')) { e.stopPropagation(); askConfirm(`Delete “${s.name}”?`, 'This saved run will be removed from this device. Back it up first if you want a copy.', 'Delete', () => { const a = savedRuns(); a.splice(i, 1); localStorage.setItem('marble.saved', JSON.stringify(a)); openLibrary(); toast('Deleted.'); }); return; }
       loadBuild(JSON.parse(JSON.stringify(s.build))); closeModals();
     };
     mine.appendChild(c);

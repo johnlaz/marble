@@ -3211,7 +3211,7 @@
       const presetsGrid = document.getElementById('presets-grid');
 
       // ---- My builds (saved on this device) + version / contact ----
-      const WORLD_VERSION = '1.5';
+      const WORLD_VERSION = '1.6';
       const SAVE_KEY = 'marbleworld.saved';
       const savedBuilds = () => { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); } catch (_) { return []; } };
       function saveCurrentBuild() {
@@ -3240,6 +3240,16 @@
         updateOrbitCamera();
         rebuildVisualTrackAndPins();
         showToast(`📂 Loaded "${b.name}"!`);
+      }
+      function askConfirm(title, body, okLabel, onOk) {
+        const o = document.createElement('div');
+        o.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:20px';
+        o.innerHTML = `<div style="background:#fff;color:#0f172a;border-radius:20px;padding:20px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4)"><div style="font-weight:900;font-size:18px;margin-bottom:6px"></div><div style="font-size:14px;font-weight:600;color:#64748b;margin-bottom:16px"></div><div style="display:flex;gap:10px"><button style="flex:1;padding:13px;border-radius:12px;background:#e2e8f0;font-weight:900;font-size:15px">Keep it</button><button style="flex:1;padding:13px;border-radius:12px;background:#ef4444;color:#fff;font-weight:900;font-size:15px"></button></div></div>`;
+        const d = o.firstChild.children; d[0].textContent = title; d[1].textContent = body;
+        const b = d[2].children; b[1].textContent = okLabel;
+        b[0].onclick = () => o.remove(); b[1].onclick = () => { o.remove(); onOk(); };
+        o.onclick = (e) => { if (e.target === o) o.remove(); };
+        document.body.appendChild(o);
       }
       function deleteSavedBuild(i) {
         const list = savedBuilds(); list.splice(i, 1);
@@ -3316,7 +3326,7 @@
             row.innerHTML = `<button class="btn-tactile flex-1 text-left font-black text-slate-800" style="min-width:0">${b.name}<span style="display:block;font-size:12px;font-weight:700;color:#64748b">${b.nodes.length} pieces</span></button><button aria-label="Delete" class="btn-tactile w-10 h-10 rounded-xl bg-rose-100 text-rose-700 font-black">🗑</button>`;
             const [openBtn, delBtn] = row.querySelectorAll('button');
             openBtn.addEventListener('click', () => { presetsModal.classList.add('hidden'); loadSavedBuild(i); });
-            delBtn.addEventListener('click', () => deleteSavedBuild(i));
+            delBtn.addEventListener('click', () => askConfirm(`Delete "${b.name}"?`, 'This saved build will be removed from this device. Back it up first if you want a copy.', 'Delete', () => { deleteSavedBuild(i); showToast('Deleted.'); }));
             presetsGrid.appendChild(row);
           });
         }
