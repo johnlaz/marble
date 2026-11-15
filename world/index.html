@@ -3211,7 +3211,7 @@
       const presetsGrid = document.getElementById('presets-grid');
 
       // ---- My builds (saved on this device) + version / contact ----
-      const WORLD_VERSION = '1.4';
+      const WORLD_VERSION = '1.5';
       const SAVE_KEY = 'marbleworld.saved';
       const savedBuilds = () => { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); } catch (_) { return []; } };
       function saveCurrentBuild() {
@@ -3253,10 +3253,14 @@
         const data = JSON.stringify({ app: 'marble-world', version: 1, saved: savedBuilds(), when: new Date().toISOString() });
         const file = new File([data], 'marble-world-backup.json', { type: 'application/json' });
         try {
-          if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: 'Marble World backup' });
-          else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
-          localStorage.setItem('marbleworld.lastBackup', Date.now()); renderPresetsModal(); showToast('Backup ready. Keep the file somewhere safe.');
-        } catch (e) { if (e && e.name !== 'AbortError') showToast('Could not make the backup.'); }
+          let shared = false;
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try { await navigator.share({ files: [file], title: 'Marble World backup' }); shared = true; }
+            catch (e) { if (e && e.name === 'AbortError') return; }
+          }
+          if (!shared) { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000); }
+          localStorage.setItem('marbleworld.lastBackup', Date.now()); renderPresetsModal(); showToast(shared ? 'Backup ready. Keep the file somewhere safe.' : 'Backup saved to your Downloads folder.');
+        } catch (e) { showToast('Could not make the backup.'); }
       }
       async function restoreBuilds(file) {
         try {
@@ -3320,7 +3324,7 @@
         const lastBk = +localStorage.getItem('marbleworld.lastBackup') || 0;
         bk.style.cssText += 'margin-top:10px;padding:12px;border-radius:16px;background:#f1f5f9;text-align:center';
         bk.innerHTML = `<div style="font-weight:900;color:#334155;margin-bottom:8px">💾 Keep my builds safe</div><button id="bk-back" class="btn-tactile" style="margin:2px 4px;padding:10px 14px;border-radius:12px;background:#2563eb;color:#fff;font-weight:900">⬇ Back up</button><button id="bk-rest" class="btn-tactile" style="margin:2px 4px;padding:10px 14px;border-radius:12px;background:#e2e8f0;color:#334155;font-weight:900">⬆ Restore</button><input type="file" id="bk-file" accept=".json,application/json" style="display:none"><div style="font-size:12px;font-weight:700;color:#64748b;margin-top:6px">${mine.length} saved build${mine.length === 1 ? '' : 's'} · ${lastBk ? 'last backup ' + new Date(lastBk).toLocaleDateString() : 'not backed up yet'}</div>`;
-        presetsGrid.appendChild(bk);
+        presetsGrid.insertBefore(bk, saveBtn.nextSibling);
         bk.querySelector('#bk-back').addEventListener('click', backupBuilds);
         bk.querySelector('#bk-rest').addEventListener('click', () => bk.querySelector('#bk-file').click());
         bk.querySelector('#bk-file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) restoreBuilds(f); });

@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HW, WT, FT, MR, ORDER, getDef, LIBRARY, MELODIES, LIFT_H, flatten } from './parts.js';
 
-const VERSION = '1.5';
+const VERSION = '1.6';
 const Y = new THREE.Vector3(0, 1, 0);
 const GRAV = -20;
 const $ = (id) => document.getElementById(id);
@@ -1512,10 +1512,14 @@ $('btnBackup').onclick = async () => {
   const data = JSON.stringify({ app: 'marble-run', version: 1, saved: savedRuns(), when: new Date().toISOString() });
   const file = new File([data], 'marble-run-backup.json', { type: 'application/json' });
   try {
-    if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: 'Marble Run backup' });
-    else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
-    localStorage.setItem('marble.lastBackup', Date.now()); bkInfo(); toast('Backup ready. Keep the file somewhere safe.');
-  } catch (e) { if (e && e.name !== 'AbortError') toast('Could not make the backup.'); }
+    let shared = false;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Marble Run backup' }); shared = true; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    if (!shared) { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000); }
+    localStorage.setItem('marble.lastBackup', Date.now()); bkInfo(); toast(shared ? 'Backup ready. Keep the file somewhere safe.' : 'Backup saved to your Downloads folder.');
+  } catch (e) { toast('Could not make the backup.'); }
 };
 $('btnRestore').onclick = () => $('fileRestore').click();
 $('fileRestore').onchange = async (e) => {
